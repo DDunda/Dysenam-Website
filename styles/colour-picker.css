@@ -1,0 +1,114 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&display=swap');
+
+* {
+	color: oklab(0.9 0 0);
+}
+
+.picker {
+	display: inline-block;
+	width:10cm;
+	height:10cm;
+	margin: 0.15cm;
+	background-color: oklch(0.2 0.038 277.496);
+	box-shadow: inset 0 0 15px -5px rgba(0,0,0,1);
+}
+
+.sliders
+{
+	display: inline-block;
+	margin: 0;
+	padding: 0.3cm;
+}
+
+.sliders > * 
+{
+	display: block;
+	height: 0.8cm;
+	margin: 0;
+	line-height: 0;
+}
+
+.sliders > * > *
+{
+	display: inline-block;
+	vertical-align: middle;
+}
+
+.sliders > * > label
+{
+	width: 2cm;
+	margin-right: 0.3cm;
+	text-align: right;
+}
+
+.sliders > * > input
+{
+	margin-left: 0.3cm;
+}
+
+.sliders > * > input[type=range][class=slider]
+{
+	width: 8cm;
+}
+
+.sliders > * > input[type=number]
+{
+	background-color: oklch(0.2 0.038 277.496);
+	padding: 0.3em 0.6em;
+	border: none;
+	width: 1.2cm;
+	border-radius: 0.1cm;
+	text-align: right;
+}
+
+.bare_box::-webkit-outer-spin-button,
+.bare_box::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+.bare_box[type=number] {
+	-moz-appearance: textfield;
+	appearance: textfield;
+}
+
+.sliders > * > h3
+{
+	text-align: center !important;
+	width: 100% !important;
+	padding: 0;
+	margin: auto;
+	line-height: 0.7cm;
+}
+
+.swatch
+{
+	display: inline-block;
+	vertical-align: top;
+	width: 3cm;
+	height: 3cm;
+	margin: 0.5em 1em;
+	box-shadow: 0 0 10px -5px rgba(0,0,0,0.5);
+}
+
+.picker, .swatch
+{
+	border-radius: 0.2cm;
+}
+
+#hex_out, #oklab_out, #oklch_out, #hsl_out, #rgb_out
+{
+	font-family: "IBM Plex Mono", monospace, sans-serif;
+	font-weight: 400;
+	font-style: normal;
+}
+
+button {
+	background-color: oklch(0.3 0.038 277.496);
+	border-color:     oklch(0.25 0.038 277.496);
+	border-width: 0 0 1mm 0;
+	border-radius: 1mm;
+	width: 1cm;
+	height: 1.1cm;
+}

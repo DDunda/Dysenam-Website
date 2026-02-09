@@ -1,0 +1,33 @@
+.skills-block {
+    width: 23.5em;
+}
+
+.skills-block > *, .skill-block {
+	display: inline-block;
+	width: 2em;
+	height: 2.5em;
+	margin: 0.15em;
+	border-radius: 0.2em;
+	box-shadow: inset rgb(0,0,0,0.15) 0 0 0.4em -0.2em; 
+	padding: 0.1em;
+
+	vertical-align: top;
+}
+
+.skills-block > *, .s-empty {background-color: light-dark(#eeeeee,#0a132c);}
+
+.skills-block > :first-child, .s-label {
+	background-color: var(--colour_accent_tertiary);
+	color: var(--colour_text_accent_tertiary);
+	width: 10em;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin-right: 0.45em;
+}
+
+.s-great-block > :nth-child(n+2):nth-child(-n+6), .s-great {background-color: #00C7F9;}
+.s-good-block > :nth-child(n+2):nth-child(-n+5), .s-good {background-color: #30DD6D;}
+.s-okay-block > :nth-child(n+2):nth-child(-n+4), .s-okay {background-color: #E8DC3C;}
+.s-meh-block > :nth-child(n+2):nth-child(-n+3), .s-meh {background-color: #FFC042;}
+.s-bad-block > :nth-child(2), .s-bad {background-color: #FF8850;}

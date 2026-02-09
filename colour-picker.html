@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<title>Super Colour Picker</title>
+
+		<link rel="stylesheet" href="/styles/colour-picker.css"/>
+		<link rel="stylesheet" href="/styles/style.css"/>
+		<script src="https://include.neocities.org/include.js"></script>
+		<script src="/scripts/mark-nav.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/culori"></script>
+
+		<!-- Generated with realfavicongenerator.net! -->
+		<link rel="apple-touch-icon" sizes="180x180" href="/assets/picker_icons/apple-touch-icon.png">
+		<link rel="icon" type="image/png" sizes="32x32" href="/assets/picker_icons/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/assets/picker_icons/favicon-16x16.png">
+		<link rel="manifest" href="/assets/picker_icons/site.webmanifest">
+		<link rel="mask-icon" href="/assets/picker_icons/safari-pinned-tab.svg" color="#e750a5">
+		<link rel="shortcut icon" href="/assets/picker_icons/favicon.ico">
+		<meta name="msapplication-TileColor" content="#e750a5">
+		<meta name="msapplication-config" content="/assets/picker_icons/browserconfig.xml">
+		<meta name="theme-color" content="#ffffff">
+	</head>
+	<body>
+		<script>include('/sections/header.html')</script>
+		<main style="background-color: transparent; text-align: center;">
+			<figure>
+				<canvas class="picker" id="LABpicker"></canvas>
+				<canvas class="picker" id="HSVpicker"></canvas>
+			</figure
+			><section style="text-align: left" class="sliders">
+				<div><h3>L</H3></div>
+				<div><label for="Luma_input">Luma</label><input type="range" min="0.0" max="1.0" step="0.002" class="slider" id="Luma_input"><input class="bare_box" type="number" min="0.0" max="1.0" step="0.01" id="Luma_input"></div>
+
+				<div><h3>L+ab</H3></div>
+				<div><label for="labA_input">A</label><input type="range" min="-0.4" max="0.4" step="0.002" class="slider" id="labA_input"><input class="bare_box" type="number" min="-0.4" max="0.4" step="0.01" id="labA_input"></div>
+				<div><label for="labB_input">B</label><input type="range" min="-0.4" max="0.4" step="0.002" class="slider" id="labB_input"><input class="bare_box" type="number" min="-0.4" max="0.4" step="0.01" id="labB_input"></div>
+
+				<div><h3>L+ch</H3></div>
+				<div><label for="lchC_input">Chroma</label><input type="range" min="0.0" max="0.4" step="0.002" class="slider" id="lchC_input"><input class="bare_box" type="number" min="-0.4" max="0.4" step="0.01" id="lchC_input"></div>
+				<div><label for="lchH_input">Hue</label><input type="range" min="0.0" max="360.0" step="1.0" class="slider" id="lchH_input"><input class="bare_box" type="number" min="-0.4" max="0.4" step="0.01" id="lchH_input"></div>
+				
+				<div><h3>HSV</H3></div>
+				<div><label for="hsvH_input">Hue</label><input type="range" min="0.0" max="360.0" step="1.0" class="slider" id="hsvH_input"><input class="bare_box" type="number" min="-0.4" max="0.4" step="0.01" id="hsvH_input"></div>
+				<div><label for="hsvS_input">Saturation</label><input type="range" min="0.0" max="1.0" step="0.01" class="slider" id="hsvS_input"><input class="bare_box" type="number" min="-0.4" max="0.4" step="0.01" id="hsvS_input"></div>
+				<div><label for="hsvV_input">Value</label><input type="range" min="0.0" max="1.0" step="0.01" class="slider" id="hsvV_input"><input class="bare_box" type="number" min="-0.4" max="0.4" step="0.01" id="hsvV_input"></div>
+				
+				<div><h3>sRGB</H3></div>
+				<div><label for="srgbR_input">Red</label><input type="range" min="0.0" max="255.0" value="127.5" step="0.1" class="slider" id="srgbR_input"><input class="bare_box" type="number" min="0.0" max="255.0" step="0.1" id="srgbR_input"></div>
+				<div><label for="srgbG_input">Green</label><input type="range" min="0.0" max="255.0" value="127.5" step="0.1" class="slider" id="srgbG_input"><input class="bare_box" type="number" min="0.0" max="255.0" step="0.1" id="srgbG_input"></div>
+				<div><label for="srgbB_input">Blue</label><input type="range" min="0.0" max="255.0" value="127.5" step="0.1" class="slider" id="srgbB_input"><input class="bare_box" type="number" min="0.0" max="255.0" step="0.1" id="srgbB_input"></div>
+
+				<div><h3>sRGB (linear)</H3></div>
+				<div><label for="lsrgbR_input">Red</label><input type="range" min="0.0" max="1.0" value="0.5" step="0.001" class="slider" id="lsrgbR_input"><input class="bare_box" type="number" min="0.0" max="1.0" step="0.01" id="lsrgbR_input"></div>
+				<div><label for="lsrgbG_input">Green</label><input type="range" min="0.0" max="1.0" value="0.5" step="0.001" class="slider" id="lsrgbG_input"><input class="bare_box" type="number" min="0.0" max="1.0" step="0.01" id="lsrgbG_input"></div>
+				<div><label for="lsrgbB_input">Blue</label><input type="range" min="0.0" max="1.0" value="0.5" step="0.001" class="slider" id="lsrgbB_input"><input class="bare_box" type="number" min="0.0" max="1.0" step="0.01" id="lsrgbB_input"></div>
+
+				<div><h3>Settings</H3></div>
+				<div><label for="resolution">Resolution</label><input type="range" min="201" max="401" value="301" step="2" class="slider" id="resolution"></div>
+				<div><label for="clip_gamut">Clip &gt;1</label><input type="checkbox" id="clip_gamut" checked></div>
+				<div><label for="clip_negative">Clip &lt;0</label><input type="checkbox" id="clip_negative" checked></div>
+			</section
+			><section style="display:inline-block;vertical-align:top;width:7cm;text-align: left">
+				<div class="swatch" id="swatch"></div
+				><p id="hex_out"></p
+				><p id="oklab_out"></p
+				><p id="oklch_out"></p
+				><p id="hsl_out"></p
+				><p id="srgb_out"></p>
+			</section>
+		</main>
+
+		<script>include('/sections/footer.html')</script>
+
+		<script src="/scripts/colour-picker.js"></script>
+	</body>
+</html>
