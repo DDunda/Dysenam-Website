@@ -24,19 +24,20 @@
 	<body>
 		<script>include('/sections/header.html')</script>
 		<main style="background-color: transparent; text-align: center;">
+		<main>
 			<figure>
 				<canvas class="picker" id="LABpicker"></canvas>
 				<canvas class="picker" id="HSVpicker"></canvas>
 			</figure
-			><section style="text-align: left" class="sliders">
-				<div><h3>L</H3></div>
-				<div><label for="Luma_input">Luma</label><input type="range" min="0.0" max="1.0" step="0.002" class="slider" id="Luma_input"><input class="bare_box" type="number" min="0.0" max="1.0" step="0.01" id="Luma_input"></div>
+			><section style="text-align: left" id="sliders">
+				<div><h3>Luma</H3></div>
+				<div><label for="Luma_input">OkL</label><input type="range" min="0.0" max="1.0" step="0.002" class="slider" id="Luma_input"><input class="bare_box" type="number" min="0.0" max="1.0" step="0.01" id="Luma_input"></div>
 
-				<div><h3>L+ab</H3></div>
+				<div><h3>OkLab</H3></div>
 				<div><label for="labA_input">A</label><input type="range" min="-0.4" max="0.4" step="0.002" class="slider" id="labA_input"><input class="bare_box" type="number" min="-0.4" max="0.4" step="0.01" id="labA_input"></div>
 				<div><label for="labB_input">B</label><input type="range" min="-0.4" max="0.4" step="0.002" class="slider" id="labB_input"><input class="bare_box" type="number" min="-0.4" max="0.4" step="0.01" id="labB_input"></div>
 
-				<div><h3>L+ch</H3></div>
+				<div><h3>OkLch</H3></div>
 				<div><label for="lchC_input">Chroma</label><input type="range" min="0.0" max="0.4" step="0.002" class="slider" id="lchC_input"><input class="bare_box" type="number" min="-0.4" max="0.4" step="0.01" id="lchC_input"></div>
 				<div><label for="lchH_input">Hue</label><input type="range" min="0.0" max="360.0" step="1.0" class="slider" id="lchH_input"><input class="bare_box" type="number" min="-0.4" max="0.4" step="0.01" id="lchH_input"></div>
 				
@@ -60,8 +61,8 @@
 				<div><label for="clip_gamut">Clip &gt;1</label><input type="checkbox" id="clip_gamut" checked></div>
 				<div><label for="clip_negative">Clip &lt;0</label><input type="checkbox" id="clip_negative" checked></div>
 			</section
-			><section style="display:inline-block;vertical-align:top;width:7cm;text-align: left">
-				<div class="swatch" id="swatch"></div
+			><section id="colour-output">
+				<div class="swatch" id="picker-swatch"></div
 				><p id="hex_out"></p
 				><p id="oklab_out"></p
 				><p id="oklch_out"></p

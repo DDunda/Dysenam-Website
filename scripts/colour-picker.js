@@ -1,54 +1,54 @@
 // Value sliders
-const LumaSlider = document.querySelector("#Luma_input[type=range]");
+const LUMA_SLIDER = document.querySelector("#Luma_input[type=range]");
 
-const labAslider = document.querySelector("#labA_input[type=range]");
-const labBslider = document.querySelector("#labB_input[type=range]");
+const LAB_A_SLIDER = document.querySelector("#labA_input[type=range]");
+const LAB_B_SLIDER = document.querySelector("#labB_input[type=range]");
 
-const lchCslider = document.querySelector("#lchC_input[type=range]");
-const lchHslider = document.querySelector("#lchH_input[type=range]");
+const LCH_C_SLIDER = document.querySelector("#lchC_input[type=range]");
+const LCH_H_SLIDER = document.querySelector("#lchH_input[type=range]");
 
-const srgbRslider = document.querySelector("#srgbR_input[type=range]");
-const srgbGslider = document.querySelector("#srgbG_input[type=range]");
-const srgbBslider = document.querySelector("#srgbB_input[type=range]");
+const SRGB_R_SLIDER = document.querySelector("#srgbR_input[type=range]");
+const SRGB_G_SLIDER = document.querySelector("#srgbG_input[type=range]");
+const SRGB_B_SLIDER = document.querySelector("#srgbB_input[type=range]");
 
-const lsrgbRslider = document.querySelector("#lsrgbR_input[type=range]");
-const lsrgbGslider = document.querySelector("#lsrgbG_input[type=range]");
-const lsrgbBslider = document.querySelector("#lsrgbB_input[type=range]");
+const LSRGB_R_SLIDER = document.querySelector("#lsrgbR_input[type=range]");
+const LSRGB_G_SLIDER = document.querySelector("#lsrgbG_input[type=range]");
+const LSRGB_B_SLIDER = document.querySelector("#lsrgbB_input[type=range]");
 
-const hsvHslider = document.querySelector("#hsvH_input[type=range]");
-const hsvSslider = document.querySelector("#hsvS_input[type=range]");
-const hsvVslider = document.querySelector("#hsvV_input[type=range]");
+const HSV_H_SLIDER = document.querySelector("#hsvH_input[type=range]");
+const HSV_S_SLIDER = document.querySelector("#hsvS_input[type=range]");
+const HSV_V_SLIDER = document.querySelector("#hsvV_input[type=range]");
 
-const LumaBox = document.querySelector("#Luma_input[type=number]");
+const LUMA_FIELD = document.querySelector("#Luma_input[type=number]");
 
-const labABox = document.querySelector("#labA_input[type=number]");
-const labBBox = document.querySelector("#labB_input[type=number]");
+const LAB_A_FIELD = document.querySelector("#labA_input[type=number]");
+const LAB_B_FIELD = document.querySelector("#labB_input[type=number]");
 
-const lchCBox = document.querySelector("#lchC_input[type=number]");
-const lchHBox = document.querySelector("#lchH_input[type=number]");
+const LCH_C_FIELD = document.querySelector("#lchC_input[type=number]");
+const LCH_H_FIELD = document.querySelector("#lchH_input[type=number]");
 
-const srgbRBox = document.querySelector("#srgbR_input[type=number]");
-const srgbGBox = document.querySelector("#srgbG_input[type=number]");
-const srgbBBox = document.querySelector("#srgbB_input[type=number]");
+const SRGB_R_FIELD = document.querySelector("#srgbR_input[type=number]");
+const SRGB_G_FIELD = document.querySelector("#srgbG_input[type=number]");
+const SRGB_B_FIELD = document.querySelector("#srgbB_input[type=number]");
 
-const lsrgbRBox = document.querySelector("#lsrgbR_input[type=number]");
-const lsrgbGBox = document.querySelector("#lsrgbG_input[type=number]");
-const lsrgbBBox = document.querySelector("#lsrgbB_input[type=number]");
+const LSRGB_R_FIELD = document.querySelector("#lsrgbR_input[type=number]");
+const LSRGB_G_FIELD = document.querySelector("#lsrgbG_input[type=number]");
+const LSRGB_B_FIELD = document.querySelector("#lsrgbB_input[type=number]");
 
-const hsvHBox = document.querySelector("#hsvH_input[type=number]");
-const hsvSBox = document.querySelector("#hsvS_input[type=number]");
-const hsvVBox = document.querySelector("#hsvV_input[type=number]");
+const HSV_H_FIELD = document.querySelector("#hsvH_input[type=number]");
+const HSV_S_FIELD = document.querySelector("#hsvS_input[type=number]");
+const HSV_V_FIELD = document.querySelector("#hsvV_input[type=number]");
 
-const Rslider = document.getElementById("resolution");
-const clip_gamut = document.getElementById("clip_gamut");
-const clip_negative = document.getElementById("clip_negative");
+const RESOLUTION_SLIDER = document.getElementById("resolution");
+const CLIP_GAMUT_CHECKBOX = document.getElementById("clip_gamut");
+const CLIP_NEGATIVE_CHECKBOX = document.getElementById("clip_negative");
 
-const swatch = document.getElementById("swatch");
-const labOut = document.getElementById("oklab_out")
-const lchOut = document.getElementById("oklch_out")
-const hexOut = document.getElementById("hex_out")
-const rgbOut = document.getElementById("srgb_out")
-const hslOut = document.getElementById("hsl_out")
+const PICKER_SWATCH = document.getElementById("picker-swatch");
+const OKLAB_OUTPUT = document.getElementById("oklab_out")
+const OKLCH_OUTPUT = document.getElementById("oklch_out")
+const HEX_OUTPUT = document.getElementById("hex_out")
+const RGB_OUTPUT = document.getElementById("srgb_out")
+const HSL_OUTPUT = document.getElementById("hsl_out")
 
 const DEFAULT_COLOUR = "#808080";
 
@@ -62,9 +62,9 @@ let B = 0;
 let C = 0;
 let H = 0;
 
-let srgbR = parseFloat(srgbRslider.value);
-let srgbG = parseFloat(srgbGslider.value);
-let srgbB = parseFloat(srgbBslider.value);
+let srgbR = parseFloat(SRGB_R_SLIDER.value);
+let srgbG = parseFloat(SRGB_G_SLIDER.value);
+let srgbB = parseFloat(SRGB_B_SLIDER.value);
 
 let lsrgbR = 0;
 let lsrgbG = 0;
@@ -74,61 +74,61 @@ let hsvH = 0;
 let hsvS = 0;
 let hsvV = 0;
 
-const padding = 0.1;
+const CANVAS_PADDING = 0.1;
 
-let resolution = parseFloat(Rslider.value);
-let super_resolution = Math.round(resolution * (1 + 2 * padding));
-let clipg = clip_gamut.checked;
-let clipn = clip_negative.checked;
+let resolution = parseFloat(RESOLUTION_SLIDER.value);
+let super_resolution = Math.round(resolution * (1 + 2 * CANVAS_PADDING));
+let clipg = CLIP_GAMUT_CHECKBOX.checked;
+let clipn = CLIP_NEGATIVE_CHECKBOX.checked;
 
 // Colour space converters
-let toSRGB = culori.converter('rgb');
-let toLSRGB = culori.converter('lrgb');
-let toLCH = culori.converter('oklch');
-let toLAB = culori.converter('oklab');
-let toHSV = culori.converter('hsv');
+const TO_SRGB = culori.converter('rgb');
+const TO_LSRGB = culori.converter('lrgb');
+const TO_LCH = culori.converter('oklch');
+const TO_LAB = culori.converter('oklab');
+const TO_HSV = culori.converter('hsv');
 
-const labCanvas = document.getElementById("LABpicker");
-const labCtx = labCanvas.getContext('2d');
-labCtx.imageSmoothingEnabled = false;
+const LAB_CANVAS = document.getElementById("LABpicker");
+const LAB_CANVAS_CONTEXT  = LAB_CANVAS.getContext('2d');
+LAB_CANVAS_CONTEXT.imageSmoothingEnabled = false;
 
-const labTxt = new OffscreenCanvas(resolution, resolution)
-const labTxtCtx = labTxt.getContext('2d');
-var labTxtId = labTxtCtx.getImageData(0, 0, resolution, resolution);
-var labTxtPixels = labTxtId.data;
+const LAB_TEXTURE = new OffscreenCanvas(resolution, resolution)
+const LAB_TEXTURE_CONTEXT = LAB_TEXTURE.getContext('2d');
+var lab_texture_imagedata = LAB_TEXTURE_CONTEXT.getImageData(0, 0, resolution, resolution);
+var lab_texture_pixels = lab_texture_imagedata.data;
 
-const hsvCanvas = document.getElementById("HSVpicker");
-const hsvCtx = hsvCanvas.getContext('2d');
-hsvCtx.imageSmoothingEnabled = false;
+const HSV_CANVAS = document.getElementById("HSVpicker");
+const HSV_CANVAS_CONTEXT = HSV_CANVAS.getContext('2d');
+HSV_CANVAS_CONTEXT.imageSmoothingEnabled = false;
 
-const hsvTxt = new OffscreenCanvas(resolution, resolution)
-const hsvTxtCtx = hsvTxt.getContext('2d');
-var hsvTxtId = hsvTxtCtx.getImageData(0, 0, resolution, resolution);
-var hsvTxtPixels = hsvTxtId.data;
+const HSV_TEXTURE = new OffscreenCanvas(resolution, resolution)
+const HSV_TEXTURE_CONTEXT = HSV_TEXTURE.getContext('2d');
+var hsv_texture_imagedata = HSV_TEXTURE_CONTEXT.getImageData(0, 0, resolution, resolution);
+var hsv_texture_pixels = hsv_texture_imagedata.data;
 
 var cur_colour = {mode: "rgb", r: srgbR / 255.0, g: srgbG / 255.0, b: srgbB / 255.0};
 
 function setResolution()
 {
-	labCanvas.width = super_resolution;
-	labCanvas.height = super_resolution;
-	labCtx.lineWidth = 0.002 * super_resolution;
+	LAB_CANVAS.width = super_resolution;
+	LAB_CANVAS.height = super_resolution;
+	LAB_CANVAS_CONTEXT.lineWidth = 0.002 * super_resolution;
 	
-	labTxt.width = resolution;
-	labTxt.height = resolution;
+	LAB_TEXTURE.width = resolution;
+	LAB_TEXTURE.height = resolution;
 
-	labTxtId = labTxtCtx.getImageData(0, 0, resolution, resolution);
-	labTxtPixels = labTxtId.data;
+	lab_texture_imagedata = LAB_TEXTURE_CONTEXT.getImageData(0, 0, resolution, resolution);
+	lab_texture_pixels = lab_texture_imagedata.data;
 
-	hsvCanvas.width = super_resolution;
-	hsvCanvas.height = super_resolution;
-	hsvCtx.lineWidth = 0.002 * super_resolution;
+	HSV_CANVAS.width = super_resolution;
+	HSV_CANVAS.height = super_resolution;
+	HSV_CANVAS_CONTEXT.lineWidth = 0.002 * super_resolution;
 	
-	hsvTxt.width = resolution;
-	hsvTxt.height = resolution;
+	HSV_TEXTURE.width = resolution;
+	HSV_TEXTURE.height = resolution;
 
-	hsvTxtId = hsvTxtCtx.getImageData(0, 0, resolution, resolution);
-	hsvTxtPixels = hsvTxtId.data;
+	hsv_texture_imagedata = HSV_TEXTURE_CONTEXT.getImageData(0, 0, resolution, resolution);
+	hsv_texture_pixels = hsv_texture_imagedata.data;
 }
 
 function drawLABImage()
@@ -140,63 +140,63 @@ function drawLABImage()
 	let y = (0.5 - B / 0.8) * resolution + pad;
 	let r = Math.sqrt(A * A + B * B) / 0.8 * resolution;
 
-	labCtx.clearRect(0, 0, super_resolution, super_resolution);
-	labCtx.putImageData(labTxtId, pad, pad);
+	LAB_CANVAS_CONTEXT.clearRect(0, 0, super_resolution, super_resolution);
+	LAB_CANVAS_CONTEXT.putImageData(lab_texture_imagedata, pad, pad);
 
-	labCtx.strokeStyle = dyn_colour;
-	labCtx.fillStyle = labCtx.strokeStyle;
-	labCtx.globalCompositeOperation = 'source-atop';
+	LAB_CANVAS_CONTEXT.strokeStyle = dyn_colour;
+	LAB_CANVAS_CONTEXT.fillStyle = LAB_CANVAS_CONTEXT.strokeStyle;
+	LAB_CANVAS_CONTEXT.globalCompositeOperation = 'source-atop';
 
-	labCtx.beginPath();
-	labCtx.moveTo(x, 0);
-	labCtx.lineTo(x, super_resolution);
-	labCtx.stroke();
+	LAB_CANVAS_CONTEXT.beginPath();
+	LAB_CANVAS_CONTEXT.moveTo(x, 0);
+	LAB_CANVAS_CONTEXT.lineTo(x, super_resolution);
+	LAB_CANVAS_CONTEXT.stroke();
 
-	labCtx.beginPath();
-	labCtx.moveTo(0, y);
-	labCtx.lineTo(super_resolution, y);
-	labCtx.stroke();
+	LAB_CANVAS_CONTEXT.beginPath();
+	LAB_CANVAS_CONTEXT.moveTo(0, y);
+	LAB_CANVAS_CONTEXT.lineTo(super_resolution, y);
+	LAB_CANVAS_CONTEXT.stroke();
 
-	labCtx.beginPath();
-	labCtx.arc(center, center, r, 0, 2 * Math.PI);
-	labCtx.stroke();
+	LAB_CANVAS_CONTEXT.beginPath();
+	LAB_CANVAS_CONTEXT.arc(center, center, r, 0, 2 * Math.PI);
+	LAB_CANVAS_CONTEXT.stroke();
 
-	labCtx.beginPath();
-	labCtx.moveTo(center, center);
-	labCtx.lineTo(x, y);
-	labCtx.stroke();
+	LAB_CANVAS_CONTEXT.beginPath();
+	LAB_CANVAS_CONTEXT.moveTo(center, center);
+	LAB_CANVAS_CONTEXT.lineTo(x, y);
+	LAB_CANVAS_CONTEXT.stroke();
 	
-	labCtx.strokeStyle = "oklab(0.9 0 0)";
-	labCtx.fillStyle = labCtx.strokeStyle;
-	labCtx.globalCompositeOperation = 'destination-over';
+	LAB_CANVAS_CONTEXT.strokeStyle = "oklab(0.9 0 0)";
+	LAB_CANVAS_CONTEXT.fillStyle = LAB_CANVAS_CONTEXT.strokeStyle;
+	LAB_CANVAS_CONTEXT.globalCompositeOperation = 'destination-over';
 
-	labCtx.beginPath();
-	labCtx.moveTo(x, 0);
-	labCtx.lineTo(x, super_resolution);
-	labCtx.stroke();
+	LAB_CANVAS_CONTEXT.beginPath();
+	LAB_CANVAS_CONTEXT.moveTo(x, 0);
+	LAB_CANVAS_CONTEXT.lineTo(x, super_resolution);
+	LAB_CANVAS_CONTEXT.stroke();
 
-	labCtx.beginPath();
-	labCtx.moveTo(0, y);
-	labCtx.lineTo(super_resolution, y);
-	labCtx.stroke();
+	LAB_CANVAS_CONTEXT.beginPath();
+	LAB_CANVAS_CONTEXT.moveTo(0, y);
+	LAB_CANVAS_CONTEXT.lineTo(super_resolution, y);
+	LAB_CANVAS_CONTEXT.stroke();
 
-	labCtx.beginPath();
-	labCtx.arc(center, center, r, 0, 2 * Math.PI);
-	labCtx.stroke();
+	LAB_CANVAS_CONTEXT.beginPath();
+	LAB_CANVAS_CONTEXT.arc(center, center, r, 0, 2 * Math.PI);
+	LAB_CANVAS_CONTEXT.stroke();
 
-	labCtx.beginPath();
-	labCtx.moveTo(center, center);
-	labCtx.lineTo(x, y);
-	labCtx.stroke();
+	LAB_CANVAS_CONTEXT.beginPath();
+	LAB_CANVAS_CONTEXT.moveTo(center, center);
+	LAB_CANVAS_CONTEXT.lineTo(x, y);
+	LAB_CANVAS_CONTEXT.stroke();
 	
-	labCtx.globalCompositeOperation = 'source-over';	
+	LAB_CANVAS_CONTEXT.globalCompositeOperation = 'source-over';	
 
-	labCtx.strokeStyle = dyn_colour;
-	labCtx.fillStyle = `oklab(${L} ${A} ${B})`
-	labCtx.beginPath();
-    labCtx.arc(x, y, super_resolution * 0.01, 0, 2 * Math.PI);
-	labCtx.fill();
-	labCtx.stroke();
+	LAB_CANVAS_CONTEXT.strokeStyle = dyn_colour;
+	LAB_CANVAS_CONTEXT.fillStyle = `oklab(${L} ${A} ${B})`
+	LAB_CANVAS_CONTEXT.beginPath();
+	LAB_CANVAS_CONTEXT.arc(x, y, super_resolution * 0.01, 0, 2 * Math.PI);
+	LAB_CANVAS_CONTEXT.fill();
+	LAB_CANVAS_CONTEXT.stroke();
 }
 
 function drawHSVImage()
@@ -208,43 +208,43 @@ function drawHSVImage()
 	let y = (-Math.sin(hsvH * Math.PI / 180) * hsvS + 1) * (resolution * 0.5) + pad;
 	let r = hsvS * resolution / 2;
 
-	hsvCtx.clearRect(0, 0, super_resolution, super_resolution)
-	hsvCtx.putImageData(hsvTxtId, pad, pad);
+	HSV_CANVAS_CONTEXT.clearRect(0, 0, super_resolution, super_resolution)
+	HSV_CANVAS_CONTEXT.putImageData(hsv_texture_imagedata, pad, pad);
 
-	hsvCtx.strokeStyle = dyn_colour;
-	hsvCtx.fillStyle = hsvCtx.strokeStyle;
-	hsvCtx.globalCompositeOperation = 'source-atop';
+	HSV_CANVAS_CONTEXT.strokeStyle = dyn_colour;
+	HSV_CANVAS_CONTEXT.fillStyle = HSV_CANVAS_CONTEXT.strokeStyle;
+	HSV_CANVAS_CONTEXT.globalCompositeOperation = 'source-atop';
 
-	hsvCtx.beginPath();
-	hsvCtx.moveTo(center, center);
-	hsvCtx.lineTo(x, y);
-	hsvCtx.stroke();
+	HSV_CANVAS_CONTEXT.beginPath();
+	HSV_CANVAS_CONTEXT.moveTo(center, center);
+	HSV_CANVAS_CONTEXT.lineTo(x, y);
+	HSV_CANVAS_CONTEXT.stroke();
 
-	hsvCtx.beginPath();
-	hsvCtx.arc(center, center, r, 0, 2 * Math.PI);
-	hsvCtx.stroke();
+	HSV_CANVAS_CONTEXT.beginPath();
+	HSV_CANVAS_CONTEXT.arc(center, center, r, 0, 2 * Math.PI);
+	HSV_CANVAS_CONTEXT.stroke();
 	
-	hsvCtx.strokeStyle = "oklab(0.9 0 0)";
-	hsvCtx.fillStyle = hsvCtx.strokeStyle;
-	hsvCtx.globalCompositeOperation = 'destination-over';
+	HSV_CANVAS_CONTEXT.strokeStyle = "oklab(0.9 0 0)";
+	HSV_CANVAS_CONTEXT.fillStyle = HSV_CANVAS_CONTEXT.strokeStyle;
+	HSV_CANVAS_CONTEXT.globalCompositeOperation = 'destination-over';
 
-	hsvCtx.beginPath();
-	hsvCtx.moveTo(center, center);
-	hsvCtx.lineTo(x, y);
-	hsvCtx.stroke();
+	HSV_CANVAS_CONTEXT.beginPath();
+	HSV_CANVAS_CONTEXT.moveTo(center, center);
+	HSV_CANVAS_CONTEXT.lineTo(x, y);
+	HSV_CANVAS_CONTEXT.stroke();
 
-	hsvCtx.beginPath();
-	hsvCtx.arc(center, center, r, 0, 2 * Math.PI);
-	hsvCtx.stroke();
+	HSV_CANVAS_CONTEXT.beginPath();
+	HSV_CANVAS_CONTEXT.arc(center, center, r, 0, 2 * Math.PI);
+	HSV_CANVAS_CONTEXT.stroke();
 	
-	hsvCtx.globalCompositeOperation = 'source-over';	
+	HSV_CANVAS_CONTEXT.globalCompositeOperation = 'source-over';	
 
-	hsvCtx.strokeStyle = dyn_colour;
-	hsvCtx.fillStyle = `oklab(${L} ${A} ${B})`
-	hsvCtx.beginPath();
-    hsvCtx.arc(x, y, resolution * 0.01, 0, 2 * Math.PI);
-	hsvCtx.fill();
-	hsvCtx.stroke();
+	HSV_CANVAS_CONTEXT.strokeStyle = dyn_colour;
+	HSV_CANVAS_CONTEXT.fillStyle = `oklab(${L} ${A} ${B})`
+	HSV_CANVAS_CONTEXT.beginPath();
+	HSV_CANVAS_CONTEXT.arc(x, y, resolution * 0.01, 0, 2 * Math.PI);
+	HSV_CANVAS_CONTEXT.fill();
+	HSV_CANVAS_CONTEXT.stroke();
 }
 
 function computeLABImage()
@@ -269,18 +269,18 @@ function computeLABImage()
 
 					colour.a = j * invRes - 0.4;
 
-					const srgb = toSRGB(colour);
+					const srgb = TO_SRGB(colour);
 					
 					if (srgb.r >= 0 && srgb.g >= 0 && srgb.b >= 0 && srgb.r <= 1 && srgb.g <= 1 && srgb.b <= 1)
 					{
-						labTxtPixels[index+0] = srgb.r * 255;
-						labTxtPixels[index+1] = srgb.g * 255;
-						labTxtPixels[index+2] = srgb.b * 255;
-						labTxtPixels[index+3] = 255;
+						lab_texture_pixels[index+0] = srgb.r * 255;
+						lab_texture_pixels[index+1] = srgb.g * 255;
+						lab_texture_pixels[index+2] = srgb.b * 255;
+						lab_texture_pixels[index+3] = 255;
 					}
 					else 
 					{							
-						labTxtPixels[index+3] = 0; // a = 0;
+						lab_texture_pixels[index+3] = 0; // a = 0;
 					}
 				}
 			}
@@ -297,18 +297,18 @@ function computeLABImage()
 
 					colour.a = j * invRes - 0.4;
 
-					const srgb = toSRGB(colour);
+					const srgb = TO_SRGB(colour);
 					
 					if (srgb.r <= 1 && srgb.g <= 1 && srgb.b <= 1)
 					{
-						labTxtPixels[index+0] = srgb.r * 255;
-						labTxtPixels[index+1] = srgb.g * 255;
-						labTxtPixels[index+2] = srgb.b * 255;
-						labTxtPixels[index+3] = 255;
+						lab_texture_pixels[index+0] = srgb.r * 255;
+						lab_texture_pixels[index+1] = srgb.g * 255;
+						lab_texture_pixels[index+2] = srgb.b * 255;
+						lab_texture_pixels[index+3] = 255;
 					}
 					else 
 					{							
-						labTxtPixels[index+3] = 0; // a = 0;
+						lab_texture_pixels[index+3] = 0; // a = 0;
 					}
 				}
 			}
@@ -328,18 +328,18 @@ function computeLABImage()
 
 					colour.a = j * invRes - 0.4;
 
-					const srgb = toSRGB(colour);
+					const srgb = TO_SRGB(colour);
 					
 					if (srgb.r >= 0 && srgb.g >= 0 && srgb.b >= 0)
 					{
-						labTxtPixels[index+0] = srgb.r * 255;
-						labTxtPixels[index+1] = srgb.g * 255;
-						labTxtPixels[index+2] = srgb.b * 255;
-						labTxtPixels[index+3] = 255;
+						lab_texture_pixels[index+0] = srgb.r * 255;
+						lab_texture_pixels[index+1] = srgb.g * 255;
+						lab_texture_pixels[index+2] = srgb.b * 255;
+						lab_texture_pixels[index+3] = 255;
 					}
 					else 
 					{							
-						labTxtPixels[index+3] = 0; // a = 0;
+						lab_texture_pixels[index+3] = 0; // a = 0;
 					}
 				}
 			}
@@ -356,12 +356,12 @@ function computeLABImage()
 
 					colour.a = j * invRes - 0.4;
 
-					const srgb = toSRGB(colour);
+					const srgb = TO_SRGB(colour);
 					
-					labTxtPixels[index+0] = srgb.r * 255;
-					labTxtPixels[index+1] = srgb.g * 255;
-					labTxtPixels[index+2] = srgb.b * 255;
-					labTxtPixels[index+3] = 255;
+					lab_texture_pixels[index+0] = srgb.r * 255;
+					lab_texture_pixels[index+1] = srgb.g * 255;
+					lab_texture_pixels[index+2] = srgb.b * 255;
+					lab_texture_pixels[index+3] = 255;
 				}
 			}
 		}
@@ -379,7 +379,7 @@ function computeHSVImage()
 		for (let i = resolution * resolution; i-- > 0;)
 		{
 			index -= 4;
-			hsvTxtPixels[index+3] = 0;
+			hsv_texture_pixels[index+3] = 0;
 		}
 		return;
 	}
@@ -400,7 +400,7 @@ function computeHSVImage()
 
 			if ( r >= center * center) 
 			{
-				hsvTxtPixels[index+3] = 0;
+				hsv_texture_pixels[index+3] = 0;
 				continue;
 			}
 
@@ -411,20 +411,20 @@ function computeHSVImage()
 			colour.h = Math.atan2(-(i - center), j - center) * 180 / Math.PI;
 			colour.s = r / center;
 
-			const srgb = toSRGB(colour);
+			const srgb = TO_SRGB(colour);
 			
-			hsvTxtPixels[index+0] = srgb.r * 255;
-			hsvTxtPixels[index+1] = srgb.g * 255;
-			hsvTxtPixels[index+2] = srgb.b * 255;
-			hsvTxtPixels[index+3] = (r < center) * (1 - (r > under) * (r - under)) * 255;
+			hsv_texture_pixels[index+0] = srgb.r * 255;
+			hsv_texture_pixels[index+1] = srgb.g * 255;
+			hsv_texture_pixels[index+2] = srgb.b * 255;
+			hsv_texture_pixels[index+3] = (r < center) * (1 - (r > under) * (r - under)) * 255;
 		}
 	}
 }
 
 function setSwatch()
 {
-	const srgb = toSRGB(cur_colour);
-	swatch.style['background-color'] = `rgb(${Math.round(srgb.r*255)},${Math.round(srgb.g*255)},${Math.round(srgb.b*255)})`
+	const srgb = TO_SRGB(cur_colour);
+	PICKER_SWATCH.style['background-color'] = `rgb(${Math.round(srgb.r*255)},${Math.round(srgb.g*255)},${Math.round(srgb.b*255)})`
 }
 
 function setOutputs()
@@ -453,11 +453,11 @@ function setOutputs()
 	lch.c = lch.c.toFixed(3);
 	lch.h = lch.h.toFixed(3);
 
-	labOut.textContent = culori.formatCss(lab);
-	lchOut.textContent = culori.formatCss(lch);
-	rgbOut.textContent = culori.formatRgb(colour_copy);
-	hexOut.textContent = culori.formatHex(colour_copy);
-	hslOut.textContent = culori.formatHsl(colour_copy);
+	OKLAB_OUTPUT.textContent = culori.formatCss(lab);
+	OKLCH_OUTPUT.textContent = culori.formatCss(lch);
+	RGB_OUTPUT.textContent = culori.formatRgb(colour_copy);
+	HEX_OUTPUT.textContent = culori.formatHex(colour_copy);
+	HSL_OUTPUT.textContent = culori.formatHsl(colour_copy);
 
 	dyn_colour = L >= 0.66 ? "oklab(0.5 0 0)" : "oklab(0.9 0 0)";
 }
@@ -473,25 +473,25 @@ function setFromL()
 		cur_colour = {mode: "oklch", l: L, c: C, h: H};
 	}
 
-	const srgb = toSRGB(cur_colour);
-	const lsrgb = toLSRGB(cur_colour);
-	const hsv = toHSV(cur_colour);
+	const srgb = TO_SRGB(cur_colour);
+	const lsrgb = TO_LSRGB(cur_colour);
+	const hsv = TO_HSV(cur_colour);
 
 	if(hsvV != hsv.v)
 	{
-		hsvVBox.value = hsvVslider.value = hsvV = hsv.v;
+		HSV_V_FIELD.value = HSV_V_SLIDER.value = hsvV = hsv.v;
 		computeHSVImage();
 	}
 
-	LumaBox.value = LumaSlider.value = L;
-	srgbRBox.value = srgbRslider.value = srgbR = srgb.r * 255.0;
-	srgbGBox.value = srgbGslider.value = srgbG = srgb.g * 255.0;
-	srgbBBox.value = srgbBslider.value = srgbB = srgb.b * 255.0;
-	lsrgbRBox.value = lsrgbRslider.value = lsrgbR = lsrgb.r;
-	lsrgbGBox.value = lsrgbGslider.value = lsrgbG = lsrgb.g;
-	lsrgbBBox.value = lsrgbBslider.value = lsrgbB = lsrgb.b;
-	hsvHslider.value = hsvH = hsv.h ? hsv.h : hsvH;
-	hsvSslider.value = hsvS = hsv.s;
+	LUMA_FIELD.value = LUMA_SLIDER.value = L;
+	SRGB_R_FIELD.value = SRGB_R_SLIDER.value = srgbR = srgb.r * 255.0;
+	SRGB_G_FIELD.value = SRGB_G_SLIDER.value = srgbG = srgb.g * 255.0;
+	SRGB_B_FIELD.value = SRGB_B_SLIDER.value = srgbB = srgb.b * 255.0;
+	LSRGB_R_FIELD.value = LSRGB_R_SLIDER.value = lsrgbR = lsrgb.r;
+	LSRGB_G_FIELD.value = LSRGB_G_SLIDER.value = lsrgbG = lsrgb.g;
+	LSRGB_B_FIELD.value = LSRGB_B_SLIDER.value = lsrgbB = lsrgb.b;
+	HSV_H_SLIDER.value = hsvH = hsv.h ? hsv.h : hsvH;
+	HSV_S_SLIDER.value = hsvS = hsv.s;
 	
 	setSwatch();
 	setOutputs();
@@ -501,31 +501,31 @@ function setFromLAB()
 {
 	cur_colour = {mode: "oklab", l: L, a: A, b: B};
 
-	//const lab = toLAB(cur_colour);
-	const lch = toLCH(cur_colour);
-	const srgb = toSRGB(cur_colour);
-	const lsrgb = toLSRGB(cur_colour);
-	const hsv = toHSV(cur_colour);
+	//const lab = TO_LAB(cur_colour);
+	const lch = TO_LCH(cur_colour);
+	const srgb = TO_SRGB(cur_colour);
+	const lsrgb = TO_LSRGB(cur_colour);
+	const hsv = TO_HSV(cur_colour);
 
 	if(hsvV != hsv.v)
 	{
-		hsvVBox.value = hsvVslider.value = hsvV = hsv.v;
+		HSV_V_FIELD.value = HSV_V_SLIDER.value = hsvV = hsv.v;
 		computeHSVImage();
 	}
 
-	LumaBox.value = LumaSlider.value = L;
-	labABox.value = labAslider.value = A;
-	labBBox.value = labBslider.value = B;
-	lchCBox.value = lchCslider.value = C = lch.c;
-	lchHBox.value = lchHslider.value = H = lch.h ? lch.h : H;
-	srgbRBox.value = srgbRslider.value = srgbR = srgb.r * 255.0;
-	srgbGBox.value = srgbGslider.value = srgbG = srgb.g * 255.0;
-	srgbBBox.value = srgbBslider.value = srgbB = srgb.b * 255.0;
-	lsrgbRBox.value = lsrgbRslider.value = lsrgbR = lsrgb.r;
-	lsrgbGBox.value = lsrgbGslider.value = lsrgbG = lsrgb.g;
-	lsrgbBBox.value = lsrgbBslider.value = lsrgbB = lsrgb.b;
-	hsvHBox.value = hsvHslider.value = hsvH = hsv.h ? hsv.h : hsvH;
-	hsvSBox.value = hsvSslider.value = hsvS = hsv.s;
+	LUMA_FIELD.value = LUMA_SLIDER.value = L;
+	LAB_A_FIELD.value = LAB_A_SLIDER.value = A;
+	LAB_B_FIELD.value = LAB_B_SLIDER.value = B;
+	LCH_C_FIELD.value = LCH_C_SLIDER.value = C = lch.c;
+	LCH_H_FIELD.value = LCH_H_SLIDER.value = H = lch.h ? lch.h : H;
+	SRGB_R_FIELD.value = SRGB_R_SLIDER.value = srgbR = srgb.r * 255.0;
+	SRGB_G_FIELD.value = SRGB_G_SLIDER.value = srgbG = srgb.g * 255.0;
+	SRGB_B_FIELD.value = SRGB_B_SLIDER.value = srgbB = srgb.b * 255.0;
+	LSRGB_R_FIELD.value = LSRGB_R_SLIDER.value = lsrgbR = lsrgb.r;
+	LSRGB_G_FIELD.value = LSRGB_G_SLIDER.value = lsrgbG = lsrgb.g;
+	LSRGB_B_FIELD.value = LSRGB_B_SLIDER.value = lsrgbB = lsrgb.b;
+	HSV_H_FIELD.value = HSV_H_SLIDER.value = hsvH = hsv.h ? hsv.h : hsvH;
+	HSV_S_FIELD.value = HSV_S_SLIDER.value = hsvS = hsv.s;
 	
 	setSwatch();
 	setOutputs();
@@ -535,31 +535,31 @@ function setFromLCH()
 {
 	cur_colour = {mode: "oklch", l: L, c: C, h: H};
 
-	const lab = toLAB(cur_colour);
-	//const lch = toLCH(cur_colour);
-	const srgb = toSRGB(cur_colour);
-	const lsrgb = toLSRGB(cur_colour);
-	const hsv = toHSV(cur_colour);
+	const lab = TO_LAB(cur_colour);
+	//const lch = TO_LCH(cur_colour);
+	const srgb = TO_SRGB(cur_colour);
+	const lsrgb = TO_LSRGB(cur_colour);
+	const hsv = TO_HSV(cur_colour);
 
 	if(hsvV != hsv.v)
 	{
-		hsvVBox.value = hsvVslider.value = hsvV = hsv.v;
+		HSV_V_FIELD.value = HSV_V_SLIDER.value = hsvV = hsv.v;
 		computeHSVImage();
 	}
 
-	LumaBox.value = LumaSlider.value = L;
-	labABox.value = labAslider.value = A = lab.a;
-	labBBox.value = labBslider.value = B = lab.b;
-	lchCBox.value = lchCslider.value = C;
-	lchHBox.value = lchHslider.value = H;
-	srgbRBox.value = srgbRslider.value = srgbR = srgb.r * 255.0;
-	srgbGBox.value = srgbGslider.value = srgbG = srgb.g * 255.0;
-	srgbBBox.value = srgbBslider.value = srgbB = srgb.b * 255.0;
-	lsrgbRBox.value = lsrgbRslider.value = lsrgbR = lsrgb.r;
-	lsrgbGBox.value = lsrgbGslider.value = lsrgbG = lsrgb.g;
-	lsrgbBBox.value = lsrgbBslider.value = lsrgbB = lsrgb.b;
-	hsvHBox.value = hsvHslider.value = hsvH = hsv.h ? hsv.h : hsvH;
-	hsvSBox.value = hsvSslider.value = hsvS = hsv.s;
+	LUMA_FIELD.value = LUMA_SLIDER.value = L;
+	LAB_A_FIELD.value = LAB_A_SLIDER.value = A = lab.a;
+	LAB_B_FIELD.value = LAB_B_SLIDER.value = B = lab.b;
+	LCH_C_FIELD.value = LCH_C_SLIDER.value = C;
+	LCH_H_FIELD.value = LCH_H_SLIDER.value = H;
+	SRGB_R_FIELD.value = SRGB_R_SLIDER.value = srgbR = srgb.r * 255.0;
+	SRGB_G_FIELD.value = SRGB_G_SLIDER.value = srgbG = srgb.g * 255.0;
+	SRGB_B_FIELD.value = SRGB_B_SLIDER.value = srgbB = srgb.b * 255.0;
+	LSRGB_R_FIELD.value = LSRGB_R_SLIDER.value = lsrgbR = lsrgb.r;
+	LSRGB_G_FIELD.value = LSRGB_G_SLIDER.value = lsrgbG = lsrgb.g;
+	LSRGB_B_FIELD.value = LSRGB_B_SLIDER.value = lsrgbB = lsrgb.b;
+	HSV_H_FIELD.value = HSV_H_SLIDER.value = hsvH = hsv.h ? hsv.h : hsvH;
+	HSV_S_FIELD.value = HSV_S_SLIDER.value = hsvS = hsv.s;
 	
 	setSwatch();
 	setOutputs();
@@ -569,36 +569,36 @@ function setFromSRGB()
 {
 	cur_colour = {mode: "rgb", r: srgbR / 255.0, g: srgbG / 255.0, b: srgbB / 255.0};
 
-	const lab = toLAB(cur_colour);
-	const lch = toLCH(cur_colour);
+	const lab = TO_LAB(cur_colour);
+	const lch = TO_LCH(cur_colour);
 	//const srgb = toRGB(cur_colour);
-	const lsrgb = toLSRGB(cur_colour);
-	const hsv = toHSV(cur_colour);
+	const lsrgb = TO_LSRGB(cur_colour);
+	const hsv = TO_HSV(cur_colour);
 
 	if(L != lab.l)
 	{
-		LumaBox.value = LumaSlider.value = L = lab.l;
+		LUMA_FIELD.value = LUMA_SLIDER.value = L = lab.l;
 		computeLABImage();
 	}
 
 	if(hsvV != hsv.v)
 	{
-		hsvVBox.value = hsvVslider.value = hsvV = hsv.v;
+		HSV_V_FIELD.value = HSV_V_SLIDER.value = hsvV = hsv.v;
 		computeHSVImage();
 	}
 
-	labABox.value = labAslider.value = A = lab.a;
-	labBBox.value = labBslider.value = B = lab.b;
-	lchCBox.value = lchCslider.value = C = lch.c;
-	lchHBox.value = lchHslider.value = H = lch.h ? lch.h : H;
-	srgbRBox.value = srgbRslider.value = srgbR;
-	srgbGBox.value = srgbGslider.value = srgbG;
-	srgbBBox.value = srgbBslider.value = srgbB;
-	lsrgbRBox.value = lsrgbRslider.value = lsrgbR = lsrgb.r;
-	lsrgbGBox.value = lsrgbGslider.value = lsrgbG = lsrgb.g;
-	lsrgbBBox.value = lsrgbBslider.value = lsrgbB = lsrgb.b;
-	hsvHBox.value = hsvHslider.value = hsvH = hsv.h ? hsv.h : hsvH;
-	hsvSBox.value = hsvSslider.value = hsvS = hsv.s;
+	LAB_A_FIELD.value = LAB_A_SLIDER.value = A = lab.a;
+	LAB_B_FIELD.value = LAB_B_SLIDER.value = B = lab.b;
+	LCH_C_FIELD.value = LCH_C_SLIDER.value = C = lch.c;
+	LCH_H_FIELD.value = LCH_H_SLIDER.value = H = lch.h ? lch.h : H;
+	SRGB_R_FIELD.value = SRGB_R_SLIDER.value = srgbR;
+	SRGB_G_FIELD.value = SRGB_G_SLIDER.value = srgbG;
+	SRGB_B_FIELD.value = SRGB_B_SLIDER.value = srgbB;
+	LSRGB_R_FIELD.value = LSRGB_R_SLIDER.value = lsrgbR = lsrgb.r;
+	LSRGB_G_FIELD.value = LSRGB_G_SLIDER.value = lsrgbG = lsrgb.g;
+	LSRGB_B_FIELD.value = LSRGB_B_SLIDER.value = lsrgbB = lsrgb.b;
+	HSV_H_FIELD.value = HSV_H_SLIDER.value = hsvH = hsv.h ? hsv.h : hsvH;
+	HSV_S_FIELD.value = HSV_S_SLIDER.value = hsvS = hsv.s;
 	
 	setSwatch();
 	setOutputs();
@@ -608,36 +608,36 @@ function setFromLSRGB()
 {
 	cur_colour = {mode: "lrgb", r: lsrgbR, g: lsrgbG, b: lsrgbB};
 
-	const lab = toLAB(cur_colour);
-	const lch = toLCH(cur_colour);
-	const srgb = toSRGB(cur_colour);
+	const lab = TO_LAB(cur_colour);
+	const lch = TO_LCH(cur_colour);
+	const srgb = TO_SRGB(cur_colour);
 	//const lsrgb = toLRGB(cur_colour);
-	const hsv = toHSV(cur_colour);
+	const hsv = TO_HSV(cur_colour);
 
 	if(L != lab.l)
 	{
-		LumaBox.value = LumaSlider.value = L = lab.l;
+		LUMA_FIELD.value = LUMA_SLIDER.value = L = lab.l;
 		computeLABImage();
 	}
 
 	if(hsvV != hsv.v)
 	{
-		hsvVBox.value = hsvVslider.value = hsvV = hsv.v;
+		HSV_V_FIELD.value = HSV_V_SLIDER.value = hsvV = hsv.v;
 		computeHSVImage();
 	}
 
-	labABox.value = labAslider.value = A = lab.a;
-	labBBox.value = labBslider.value = B = lab.b;
-	lchCBox.value = lchCslider.value = C = lch.c;
-	lchHBox.value = lchHslider.value = H = lch.h ? lch.h : H;
-	srgbRBox.value = srgbRslider.value = srgbR = srgb.r * 255.0;
-	srgbGBox.value = srgbGslider.value = srgbG = srgb.g * 255.0;
-	srgbBBox.value = srgbBslider.value = srgbB = srgb.b * 255.0;
-	lsrgbRBox.value = lsrgbRslider.value = lsrgbR;
-	lsrgbGBox.value = lsrgbGslider.value = lsrgbG;
-	lsrgbBBox.value = lsrgbBslider.value = lsrgbB;
-	hsvHBox.value = hsvHslider.value = hsvH = hsv.h ? hsv.h : hsvH;
-	hsvSBox.value = hsvSslider.value = hsvS = hsv.s;
+	LAB_A_FIELD.value = LAB_A_SLIDER.value = A = lab.a;
+	LAB_B_FIELD.value = LAB_B_SLIDER.value = B = lab.b;
+	LCH_C_FIELD.value = LCH_C_SLIDER.value = C = lch.c;
+	LCH_H_FIELD.value = LCH_H_SLIDER.value = H = lch.h ? lch.h : H;
+	SRGB_R_FIELD.value = SRGB_R_SLIDER.value = srgbR = srgb.r * 255.0;
+	SRGB_G_FIELD.value = SRGB_G_SLIDER.value = srgbG = srgb.g * 255.0;
+	SRGB_B_FIELD.value = SRGB_B_SLIDER.value = srgbB = srgb.b * 255.0;
+	LSRGB_R_FIELD.value = LSRGB_R_SLIDER.value = lsrgbR;
+	LSRGB_G_FIELD.value = LSRGB_G_SLIDER.value = lsrgbG;
+	LSRGB_B_FIELD.value = LSRGB_B_SLIDER.value = lsrgbB;
+	HSV_H_FIELD.value = HSV_H_SLIDER.value = hsvH = hsv.h ? hsv.h : hsvH;
+	HSV_S_FIELD.value = HSV_S_SLIDER.value = hsvS = hsv.s;
 	
 	setSwatch();
 	setOutputs();
@@ -647,31 +647,31 @@ function setFromHSV()
 {
 	cur_colour = {mode: "hsv", h: hsvH, s: hsvS, v: hsvV};
 
-	const lab = toLAB(cur_colour);
-	const lch = toLCH(cur_colour);
-	const srgb = toSRGB(cur_colour);
-	const lsrgb = toLSRGB(cur_colour);
-	//const hsv = toHSV(cur_colour);
+	const lab = TO_LAB(cur_colour);
+	const lch = TO_LCH(cur_colour);
+	const srgb = TO_SRGB(cur_colour);
+	const lsrgb = TO_LSRGB(cur_colour);
+	//const hsv = TO_HSV(cur_colour);
 
 	if(L != lab.l)
 	{
-		LumaBox.value = LumaSlider.value = L = lab.l;
+		LUMA_FIELD.value = LUMA_SLIDER.value = L = lab.l;
 		computeLABImage();
 	}
 
-	labABox.value = labAslider.value = A = lab.a;
-	labBBox.value = labBslider.value = B = lab.b;
-	lchCBox.value = lchCslider.value = C = lch.c;
-	lchHBox.value = lchHslider.value = H = lch.h ? lch.h : H;
-	srgbRBox.value = srgbRslider.value = srgbR = srgb.r * 255.0;
-	srgbGBox.value = srgbGslider.value = srgbG = srgb.g * 255.0;
-	srgbBBox.value = srgbBslider.value = srgbB = srgb.b * 255.0;
-	lsrgbRBox.value = lsrgbRslider.value = lsrgbR = lsrgb.r;
-	lsrgbGBox.value = lsrgbGslider.value = lsrgbG = lsrgb.g;
-	lsrgbBBox.value = lsrgbBslider.value = lsrgbB = lsrgb.b;
-	hsvHBox.value = hsvHslider.value = hsvH;
-	hsvSBox.value = hsvSslider.value = hsvS;
-	hsvVBox.value = hsvVslider.value = hsvV;
+	LAB_A_FIELD.value = LAB_A_SLIDER.value = A = lab.a;
+	LAB_B_FIELD.value = LAB_B_SLIDER.value = B = lab.b;
+	LCH_C_FIELD.value = LCH_C_SLIDER.value = C = lch.c;
+	LCH_H_FIELD.value = LCH_H_SLIDER.value = H = lch.h ? lch.h : H;
+	SRGB_R_FIELD.value = SRGB_R_SLIDER.value = srgbR = srgb.r * 255.0;
+	SRGB_G_FIELD.value = SRGB_G_SLIDER.value = srgbG = srgb.g * 255.0;
+	SRGB_B_FIELD.value = SRGB_B_SLIDER.value = srgbB = srgb.b * 255.0;
+	LSRGB_R_FIELD.value = LSRGB_R_SLIDER.value = lsrgbR = lsrgb.r;
+	LSRGB_G_FIELD.value = LSRGB_G_SLIDER.value = lsrgbG = lsrgb.g;
+	LSRGB_B_FIELD.value = LSRGB_B_SLIDER.value = lsrgbB = lsrgb.b;
+	HSV_H_FIELD.value = HSV_H_SLIDER.value = hsvH;
+	HSV_S_FIELD.value = HSV_S_SLIDER.value = hsvS;
+	HSV_V_FIELD.value = HSV_V_SLIDER.value = hsvV;
 	
 	setSwatch();
 	setOutputs();
@@ -683,36 +683,36 @@ function setFromURL()
 	if (hex == "" || hex == undefined) hex = DEFAULT_COLOUR;
 	cur_colour = culori.parse(hex);
 
-	const lab = toLAB(cur_colour);
-	const lch = toLCH(cur_colour);
-	const srgb = toSRGB(cur_colour);
-	const lsrgb = toLSRGB(cur_colour);
-	const hsv = toHSV(cur_colour);
+	const lab = TO_LAB(cur_colour);
+	const lch = TO_LCH(cur_colour);
+	const srgb = TO_SRGB(cur_colour);
+	const lsrgb = TO_LSRGB(cur_colour);
+	const hsv = TO_HSV(cur_colour);
 
 	if(L != lab.l)
 	{
-		LumaBox.value = LumaSlider.value = L = lab.l;
+		LUMA_FIELD.value = LUMA_SLIDER.value = L = lab.l;
 		computeLABImage();
 	}
 
 	if(hsvV != hsv.v)
 	{
-		hsvVBox.value = hsvVslider.value = hsvV = hsv.v;
+		HSV_V_FIELD.value = HSV_V_SLIDER.value = hsvV = hsv.v;
 		computeHSVImage();
 	}
 
-	labABox.value = labAslider.value = A = lab.a;
-	labBBox.value = labBslider.value = B = lab.b;
-	lchCBox.value = lchCslider.value = C = lch.c;
-	lchHBox.value = lchHslider.value = H = lch.h ? lch.h : H;
-	srgbRBox.value = srgbRslider.value = srgbR = srgb.r * 255.0;
-	srgbGBox.value = srgbGslider.value = srgbG = srgb.g * 255.0;
-	srgbBBox.value = srgbBslider.value = srgbB = srgb.b * 255.0;
-	lsrgbRBox.value = lsrgbRslider.value = lsrgbR = lsrgb.r;
-	lsrgbGBox.value = lsrgbGslider.value = lsrgbG = lsrgb.g;
-	lsrgbBBox.value = lsrgbBslider.value = lsrgbB = lsrgb.b;
-	hsvHBox.value = hsvHslider.value = hsvH = hsv.h ? hsv.h : hsvH;
-	hsvSBox.value = hsvSslider.value = hsvS = hsv.s;
+	LAB_A_FIELD.value = LAB_A_SLIDER.value = A = lab.a;
+	LAB_B_FIELD.value = LAB_B_SLIDER.value = B = lab.b;
+	LCH_C_FIELD.value = LCH_C_SLIDER.value = C = lch.c;
+	LCH_H_FIELD.value = LCH_H_SLIDER.value = H = lch.h ? lch.h : H;
+	SRGB_R_FIELD.value = SRGB_R_SLIDER.value = srgbR = srgb.r * 255.0;
+	SRGB_G_FIELD.value = SRGB_G_SLIDER.value = srgbG = srgb.g * 255.0;
+	SRGB_B_FIELD.value = SRGB_B_SLIDER.value = srgbB = srgb.b * 255.0;
+	LSRGB_R_FIELD.value = LSRGB_R_SLIDER.value = lsrgbR = lsrgb.r;
+	LSRGB_G_FIELD.value = LSRGB_G_SLIDER.value = lsrgbG = lsrgb.g;
+	LSRGB_B_FIELD.value = LSRGB_B_SLIDER.value = lsrgbB = lsrgb.b;
+	HSV_H_FIELD.value = HSV_H_SLIDER.value = hsvH = hsv.h ? hsv.h : hsvH;
+	HSV_S_FIELD.value = HSV_S_SLIDER.value = hsvS = hsv.s;
 	
 	setSwatch();
 	setOutputs();
@@ -720,10 +720,10 @@ function setFromURL()
 
 function onMoveLAB(event)
 {
-	var left = labCanvas.offsetLeft + labCanvas.clientLeft;
-	var top = labCanvas.offsetTop + labCanvas.clientTop;
-	var width = labCanvas.clientWidth;
-	var height = labCanvas.clientHeight;
+	var left = LAB_CANVAS.offsetLeft + LAB_CANVAS.clientLeft;
+	var top = LAB_CANVAS.offsetTop + LAB_CANVAS.clientTop;
+	var width = LAB_CANVAS.clientWidth;
+	var height = LAB_CANVAS.clientHeight;
 
 	var x = (event.pageX - left) / width;
 	var y = 1 - (event.pageY - top) / height;
@@ -746,30 +746,30 @@ function onMoveLAB(event)
 
 function checkColourChange()
 {
-	if (window.location.hash == hexOut.textContent) return;
+	if (window.location.hash == HEX_OUTPUT.textContent) return;
 
-	window.location.hash = hexOut.textContent;
+	window.location.hash = HEX_OUTPUT.textContent;
 }
 
 function onDownLAB(event)
 {
 	onMoveLAB(event);
-	labCanvas.addEventListener('mousemove', onMoveLAB, false);
+	LAB_CANVAS.addEventListener('mousemove', onMoveLAB, false);
 }
 
 function onUpLAB(event)
 {
 	onMoveLAB(event);
-	labCanvas.removeEventListener('mousemove', onMoveLAB, false);
+	LAB_CANVAS.removeEventListener('mousemove', onMoveLAB, false);
 	checkColourChange();
 }
 
 function onMoveHSV(event)
 {
-	var left = hsvCanvas.offsetLeft + hsvCanvas.clientLeft;
-	var top = hsvCanvas.offsetTop + hsvCanvas.clientTop;
-	var width = hsvCanvas.clientWidth;
-	var height = hsvCanvas.clientHeight;
+	var left = HSV_CANVAS.offsetLeft + HSV_CANVAS.clientLeft;
+	var top = HSV_CANVAS.offsetTop + HSV_CANVAS.clientTop;
+	var width = HSV_CANVAS.clientWidth;
+	var height = HSV_CANVAS.clientHeight;
 
 	var x = (event.pageX - left) / width;
 	var y = 1 - (event.pageY - top) / height;
@@ -793,23 +793,23 @@ function onMoveHSV(event)
 function onDownHSV(event)
 {
 	onMoveHSV(event);
-	hsvCanvas.addEventListener('mousemove', onMoveHSV, false);
+	HSV_CANVAS.addEventListener('mousemove', onMoveHSV, false);
 }
 
 function onUpHSV(event)
 {
 	onMoveHSV(event);
-	hsvCanvas.removeEventListener('mousemove', onMoveHSV, false);
+	HSV_CANVAS.removeEventListener('mousemove', onMoveHSV, false);
 	checkColourChange();
 }
 
-labCanvas.addEventListener('mousedown', onDownLAB, false);
-labCanvas.addEventListener('mouseup', onUpLAB, false);
+LAB_CANVAS.addEventListener('mousedown', onDownLAB, false);
+LAB_CANVAS.addEventListener('mouseup', onUpLAB, false);
 
-hsvCanvas.addEventListener('mousedown', onDownHSV, false);
-hsvCanvas.addEventListener('mouseup', onUpHSV, false);
+HSV_CANVAS.addEventListener('mousedown', onDownHSV, false);
+HSV_CANVAS.addEventListener('mouseup', onUpHSV, false);
 
-LumaBox.oninput = LumaSlider.oninput = function()
+LUMA_FIELD.oninput = LUMA_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == L) return;
@@ -822,7 +822,7 @@ LumaBox.oninput = LumaSlider.oninput = function()
 	drawHSVImage();
 };
 
-labABox.oninput = labAslider.oninput = function()
+LAB_A_FIELD.oninput = LAB_A_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == A) return;
@@ -833,7 +833,7 @@ labABox.oninput = labAslider.oninput = function()
 	drawHSVImage();
 };
 
-labBBox.oninput = labBslider.oninput = function()
+LAB_B_FIELD.oninput = LAB_B_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == B) return;
@@ -844,7 +844,7 @@ labBBox.oninput = labBslider.oninput = function()
 	drawHSVImage();
 };
 
-lchCBox.oninput = lchCslider.oninput = function()
+LCH_C_FIELD.oninput = LCH_C_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == C) return;
@@ -855,7 +855,7 @@ lchCBox.oninput = lchCslider.oninput = function()
 	drawHSVImage();
 };
 
-lchHBox.oninput = lchHslider.oninput = function()
+LCH_H_FIELD.oninput = LCH_H_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == H) return;
@@ -866,7 +866,7 @@ lchHBox.oninput = lchHslider.oninput = function()
 	drawHSVImage();
 };
 
-srgbRBox.oninput = srgbRslider.oninput = function()
+SRGB_R_FIELD.oninput = SRGB_R_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == srgbR) return;
@@ -877,7 +877,7 @@ srgbRBox.oninput = srgbRslider.oninput = function()
 	drawHSVImage();
 };
 
-srgbGBox.oninput = srgbGslider.oninput = function()
+SRGB_G_FIELD.oninput = SRGB_G_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == srgbG) return;
@@ -888,7 +888,7 @@ srgbGBox.oninput = srgbGslider.oninput = function()
 	drawHSVImage();
 };
 
-srgbBBox.oninput = srgbBslider.oninput = function()
+SRGB_B_FIELD.oninput = SRGB_B_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == srgbB) return;
@@ -899,7 +899,7 @@ srgbBBox.oninput = srgbBslider.oninput = function()
 	drawHSVImage();
 };
 
-lsrgbRBox.oninput = lsrgbRslider.oninput = function()
+LSRGB_R_FIELD.oninput = LSRGB_R_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == lsrgbR) return;
@@ -910,7 +910,7 @@ lsrgbRBox.oninput = lsrgbRslider.oninput = function()
 	drawHSVImage();
 };
 
-lsrgbGBox.oninput = lsrgbGslider.oninput = function()
+LSRGB_G_FIELD.oninput = LSRGB_G_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == lsrgbG) return;
@@ -921,7 +921,7 @@ lsrgbGBox.oninput = lsrgbGslider.oninput = function()
 	drawHSVImage();
 };
 
-lsrgbBBox.oninput = lsrgbBslider.oninput = function()
+LSRGB_B_FIELD.oninput = LSRGB_B_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == lsrgbB) return;
@@ -932,7 +932,7 @@ lsrgbBBox.oninput = lsrgbBslider.oninput = function()
 	drawHSVImage();
 };
 
-hsvHBox.oninput = hsvHslider.oninput = function()
+HSV_H_FIELD.oninput = HSV_H_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == hsvH) return;
@@ -943,7 +943,7 @@ hsvHBox.oninput = hsvHslider.oninput = function()
 	drawHSVImage();
 };
 
-hsvSBox.oninput = hsvSslider.oninput = function()
+HSV_S_FIELD.oninput = HSV_S_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == hsvS) return;
@@ -954,7 +954,7 @@ hsvSBox.oninput = hsvSslider.oninput = function()
 	drawHSVImage();
 };
 
-hsvVBox.oninput = hsvVslider.oninput = function()
+HSV_V_FIELD.oninput = HSV_V_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == hsvV) return;
@@ -967,12 +967,12 @@ hsvVBox.oninput = hsvVslider.oninput = function()
 	drawHSVImage();
 };
 
-Rslider.oninput = function()
+RESOLUTION_SLIDER.oninput = function()
 {
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == resolution) return;
 	resolution = parseFloat(this.value);
-	super_resolution = Math.round(resolution * (1 + 2 * padding));
+	super_resolution = Math.round(resolution * (1 + 2 * CANVAS_PADDING));
 
 	setResolution();
 	computeLABImage();
@@ -981,30 +981,30 @@ Rslider.oninput = function()
 	drawHSVImage();
 };
 
-clip_gamut.onclick = function()
+CLIP_GAMUT_CHECKBOX.onclick = function()
 {
-	if(clip_gamut.checked == clipg) return;
-	clipg = clip_gamut.checked;
+	if(CLIP_GAMUT_CHECKBOX.checked == clipg) return;
+	clipg = CLIP_GAMUT_CHECKBOX.checked;
 	computeLABImage();
 	computeHSVImage();
 	drawLABImage();
 	drawHSVImage();
 };
 
-clip_negative.onclick = function()
+CLIP_NEGATIVE_CHECKBOX.onclick = function()
 {
-	if(clip_negative.checked == clipn) return;
-	clipn = clip_negative.checked;
+	if(CLIP_NEGATIVE_CHECKBOX.checked == clipn) return;
+	clipn = CLIP_NEGATIVE_CHECKBOX.checked;
 	computeLABImage();
 	computeHSVImage();
 	drawLABImage();
 	drawHSVImage();
 };
 
-labCanvas.width = super_resolution;
-labCanvas.height = super_resolution;
-hsvCanvas.width = super_resolution;
-hsvCanvas.height = super_resolution;	
+LAB_CANVAS.width = super_resolution;
+LAB_CANVAS.height = super_resolution;
+HSV_CANVAS.width = super_resolution;
+HSV_CANVAS.height = super_resolution;	
 
 setFromURL();
 computeHSVImage();
@@ -1012,17 +1012,17 @@ computeLABImage();
 drawHSVImage();
 drawLABImage();
 
-LumaBox.onchange = LumaSlider.onchange =
-labABox.onchange = labAslider.onchange =
-labBBox.onchange = labBslider.onchange =
-lchCBox.onchange = lchCslider.onchange =
-lchHBox.onchange = lchHslider.onchange =
-srgbRBox.onchange = srgbRslider.onchange =
-srgbGBox.onchange = srgbGslider.onchange =
-srgbBBox.onchange = srgbBslider.onchange =
-lsrgbRBox.onchange = lsrgbRslider.onchange =
-lsrgbGBox.onchange = lsrgbGslider.onchange =
-lsrgbBBox.onchange = lsrgbBslider.onchange =
-hsvHBox.onchange = hsvHslider.onchange =
-hsvSBox.onchange = hsvSslider.onchange =
-hsvVBox.onchange = hsvVslider.onchange = function(){checkColourChange();}
+LUMA_FIELD.onchange = LUMA_SLIDER.onchange =
+LAB_A_FIELD.onchange = LAB_A_SLIDER.onchange =
+LAB_B_FIELD.onchange = LAB_B_SLIDER.onchange =
+LCH_C_FIELD.onchange = LCH_C_SLIDER.onchange =
+LCH_H_FIELD.onchange = LCH_H_SLIDER.onchange =
+SRGB_R_FIELD.onchange = SRGB_R_SLIDER.onchange =
+SRGB_G_FIELD.onchange = SRGB_G_SLIDER.onchange =
+SRGB_B_FIELD.onchange = SRGB_B_SLIDER.onchange =
+LSRGB_R_FIELD.onchange = LSRGB_R_SLIDER.onchange =
+LSRGB_G_FIELD.onchange = LSRGB_G_SLIDER.onchange =
+LSRGB_B_FIELD.onchange = LSRGB_B_SLIDER.onchange =
+HSV_H_FIELD.onchange = HSV_H_SLIDER.onchange =
+HSV_S_FIELD.onchange = HSV_S_SLIDER.onchange =
+HSV_V_FIELD.onchange = HSV_V_SLIDER.onchange = function(){checkColourChange();}

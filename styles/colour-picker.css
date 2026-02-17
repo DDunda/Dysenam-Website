@@ -5,23 +5,28 @@
 	color: oklab(0.9 0 0);
 }
 
+main {
+	text-align: center;
+	width: min(100VH,90VW);
+}
+
 .picker {
 	display: inline-block;
-	width:10cm;
-	height:10cm;
+	width: 10cm;
+	height: 10cm;
 	margin: 0.15cm;
 	background-color: oklch(0.2 0.038 277.496);
 	box-shadow: inset 0 0 15px -5px rgba(0,0,0,1);
 }
 
-.sliders
+#sliders
 {
 	display: inline-block;
 	margin: 0;
 	padding: 0.3cm;
 }
 
-.sliders > * 
+#sliders > * 
 {
 	display: block;
 	height: 0.8cm;
@@ -29,30 +34,30 @@
 	line-height: 0;
 }
 
-.sliders > * > *
+#sliders > * > *
 {
 	display: inline-block;
 	vertical-align: middle;
 }
 
-.sliders > * > label
+#sliders > * > label
 {
 	width: 2cm;
 	margin-right: 0.3cm;
 	text-align: right;
 }
 
-.sliders > * > input
+#sliders > * > input
 {
 	margin-left: 0.3cm;
 }
 
-.sliders > * > input[type=range][class=slider]
+#sliders > * > input[type=range][class=slider]
 {
 	width: 8cm;
 }
 
-.sliders > * > input[type=number]
+#sliders > * > input[type=number]
 {
 	background-color: oklch(0.2 0.038 277.496);
 	padding: 0.3em 0.6em;
@@ -73,7 +78,7 @@
 	appearance: textfield;
 }
 
-.sliders > * > h3
+#sliders > * > h3
 {
 	text-align: center !important;
 	width: 100% !important;
@@ -105,10 +110,23 @@
 }
 
 button {
-	background-color: oklch(0.3 0.038 277.496);
-	border-color:     oklch(0.25 0.038 277.496);
-	border-width: 0 0 1mm 0;
-	border-radius: 1mm;
-	width: 1cm;
-	height: 1.1cm;
+	background-color: var(--colour_accent_primary);
+	/*border-color:     color-mix(in oklab, var(--colour_accent_primary), var(--colour_background) 80%);
+	border-width: 0 0 1mm 0;*/
+	border-radius: var(--spacing-xxs);
+	margin: var(--spacing-xxs);
+	width: 3rem;
+	height: 3rem;
+}
+
+button:hover {
+	background-color: var(--colour_hover_accent_primary);
+}
+
+#colour-output
+{
+	display: inline-block;
+	vertical-align: top;
+	width:7cm;
+	text-align: left
 }
