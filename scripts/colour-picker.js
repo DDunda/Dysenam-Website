@@ -1,5 +1,6 @@
 // Value sliders
 const LUMA_SLIDER = document.querySelector("#Luma_input[type=range]");
+const LR_SLIDER = document.querySelector("#Lr_input[type=range]");
 
 const LAB_A_SLIDER = document.querySelector("#labA_input[type=range]");
 const LAB_B_SLIDER = document.querySelector("#labB_input[type=range]");
@@ -20,6 +21,7 @@ const HSV_S_SLIDER = document.querySelector("#hsvS_input[type=range]");
 const HSV_V_SLIDER = document.querySelector("#hsvV_input[type=range]");
 
 const LUMA_FIELD = document.querySelector("#Luma_input[type=number]");
+const LR_FIELD = document.querySelector("#Lr_input[type=number]");
 
 const LAB_A_FIELD = document.querySelector("#labA_input[type=number]");
 const LAB_B_FIELD = document.querySelector("#labB_input[type=number]");
@@ -52,8 +54,13 @@ const HSL_OUTPUT = document.getElementById("hsl_out")
 
 const DEFAULT_COLOUR = "#808080";
 
+const K1 = 0.206;
+const K2 = 0.03;
+const K3 = (1+K1)/(1+K2);
+
 // Internal Values
 let L = 0;
+let Lr = 0;
 let dyn_colour = L >= 0.66 ? "oklab(0.5 0 0)" : "oklab(0.9 0 0)";
 
 let A = 0;
@@ -462,6 +469,15 @@ function setOutputs()
 	dyn_colour = L >= 0.66 ? "oklab(0.5 0 0)" : "oklab(0.9 0 0)";
 }
 
+function LtoLr(L)
+{
+	return (K3 * L - K1 + Math.sqrt(Math.pow(K3 * L - K1, 2) + 4 * K2 * K3 * L)) / 2;
+}
+function LrtoL(Lr)
+{
+	return (Lr * (Lr + K1)) / (K3 * (Lr + K2))
+}
+
 function setFromL()
 {
 	if(cur_colour.mode == "oklab" || cur_colour.mode == "oklch")
@@ -484,6 +500,7 @@ function setFromL()
 	}
 
 	LUMA_FIELD.value = LUMA_SLIDER.value = L;
+	LR_FIELD.value = LR_SLIDER.value = Lr;
 	SRGB_R_FIELD.value = SRGB_R_SLIDER.value = srgbR = srgb.r * 255.0;
 	SRGB_G_FIELD.value = SRGB_G_SLIDER.value = srgbG = srgb.g * 255.0;
 	SRGB_B_FIELD.value = SRGB_B_SLIDER.value = srgbB = srgb.b * 255.0;
@@ -514,6 +531,7 @@ function setFromLAB()
 	}
 
 	LUMA_FIELD.value = LUMA_SLIDER.value = L;
+	LR_FIELD.value = LR_SLIDER.value = Lr;
 	LAB_A_FIELD.value = LAB_A_SLIDER.value = A;
 	LAB_B_FIELD.value = LAB_B_SLIDER.value = B;
 	LCH_C_FIELD.value = LCH_C_SLIDER.value = C = lch.c;
@@ -548,6 +566,7 @@ function setFromLCH()
 	}
 
 	LUMA_FIELD.value = LUMA_SLIDER.value = L;
+	LR_FIELD.value = LR_SLIDER.value = Lr;
 	LAB_A_FIELD.value = LAB_A_SLIDER.value = A = lab.a;
 	LAB_B_FIELD.value = LAB_B_SLIDER.value = B = lab.b;
 	LCH_C_FIELD.value = LCH_C_SLIDER.value = C;
@@ -578,6 +597,7 @@ function setFromSRGB()
 	if(L != lab.l)
 	{
 		LUMA_FIELD.value = LUMA_SLIDER.value = L = lab.l;
+		LR_FIELD.value = LR_SLIDER.value = Lr = LtoLr(L);
 		computeLABImage();
 	}
 
@@ -617,6 +637,7 @@ function setFromLSRGB()
 	if(L != lab.l)
 	{
 		LUMA_FIELD.value = LUMA_SLIDER.value = L = lab.l;
+		LR_FIELD.value = LR_SLIDER.value = Lr = LtoLr(L);
 		computeLABImage();
 	}
 
@@ -656,6 +677,7 @@ function setFromHSV()
 	if(L != lab.l)
 	{
 		LUMA_FIELD.value = LUMA_SLIDER.value = L = lab.l;
+		LR_FIELD.value = LR_SLIDER.value = Lr = LtoLr(L);
 		computeLABImage();
 	}
 
@@ -692,6 +714,7 @@ function setFromURL()
 	if(L != lab.l)
 	{
 		LUMA_FIELD.value = LUMA_SLIDER.value = L = lab.l;
+		LR_FIELD.value = LR_SLIDER.value = Lr = LtoLr(L);
 		computeLABImage();
 	}
 
@@ -814,6 +837,21 @@ LUMA_FIELD.oninput = LUMA_SLIDER.oninput = function()
 	let parsed = parseFloat(this.value);
 	if(isNaN(parsed) || parsed == L) return;
 	L = parseFloat(this.value);
+	Lr = LtoLr(L)
+	
+	computeLABImage();
+
+	setFromL(); 
+	drawLABImage();
+	drawHSVImage();
+};
+
+LR_FIELD.oninput = LR_SLIDER.oninput = function()
+{
+	let parsed = parseFloat(this.value);
+	if(isNaN(parsed) || parsed == Lr) return;
+	Lr = parseFloat(this.value);
+	L = LrtoL(Lr)
 	
 	computeLABImage();
 
@@ -1013,6 +1051,7 @@ drawHSVImage();
 drawLABImage();
 
 LUMA_FIELD.onchange = LUMA_SLIDER.onchange =
+LR_FIELD.onchange = LR_SLIDER.onchange =
 LAB_A_FIELD.onchange = LAB_A_SLIDER.onchange =
 LAB_B_FIELD.onchange = LAB_B_SLIDER.onchange =
 LCH_C_FIELD.onchange = LCH_C_SLIDER.onchange =
