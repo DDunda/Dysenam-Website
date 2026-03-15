@@ -15,10 +15,10 @@
 	--colour_text_accent_secondary: var(--colour_text);
 	--colour_text_accent_tertiary: light-dark(var(--colour_background),var(--colour_text));
 
-	--colour_hover_link: ;
-	--colour_hover_accent_primary: ;
-	--colour_hover_accent_secondary: ;
-	--colour_hover_accent_tertiary: ;
+	--colour_link_hover: color-mix(in oklch, var(--colour_link) 95%, var(--colour_background) 5%);
+	--colour_accent_primary_hover: color-mix(in oklch, var(--colour_accent_primary) 95%, light-dark(#000, #FFF) 5%);
+	--colour_accent_secondary_hover: color-mix(in oklch, var(--colour_accent_secondary) 95%, light-dark(#000, #FFF) 5%);
+	--colour_accent_tertiary_hover: color-mix(in oklch, var(--colour_accent_tertiary) 95%, light-dark(#000, #FFF) 5%);
 
 	--spacing-xxxs: .125rem;
 	--spacing-xxs: .25rem;
@@ -279,4 +279,15 @@ footer {
 
 li {
 	margin-bottom: var(--spacing-s);
+}
+
+button {
+	background-color: var(--colour_accent_primary);
+	border-radius: var(--spacing-xxs);
+	padding: var(--spacing-xxs) var(--spacing-s);
+}
+
+button:hover
+{
+	background-color: var(colour_accent_primary_hover);
 }
