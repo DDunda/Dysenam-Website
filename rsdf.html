@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<title>RSDF Converter</title>
+		
+		<link rel="stylesheet" href="/styles/style.css"/>
+		<script src="https://include.neocities.org/include.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/clipper-lib/clipper.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/path-data-polyfill/path-data-polyfill.min.js"></script>
+		<script src="/scripts/mark-nav.js"></script>
+	</head>
+	<body>
+		<script>include('/sections/header.html')</script>
+		<main>
+			<input id="upload_input" type="file" name="upload_input" accept="image/svg+xml"/>
+			<div id="input_preview">
+				<div id="input_preview_name"></div>
+				<div id="input_preview_svg" style="max-width:50%"></div>
+			</div>
+			<form id="rsdf-settings">
+				<!-- TODO: Add settings for SVG placement on texture -->
+				<!-- TODO: Add settings for margins -->
+				<!-- TODO: Add settings for precision, resolution -->
+				<button type="submit" id="button-convert">Convert</button>
+			</form>
+
+			<section id="credits">
+				<h2>Credits</h2>
+				<ul>
+					<li><a href="https://artdraw.muisca.co/post/13328/boolean-operations-in-svg-using-javascript.html">Boolean Operations in SVG Using Javascript</a></li>
+					<li><a href="https://github.com/fracalo/svg-contour">SVG Contour (outline to path)</a></li>
+				</ul>
+			</section>
+		</main>
+		<script>include('/sections/footer.html');</script>
+		<script src="/scripts/rsdf.js"></script>
+	</body>
+</html>
