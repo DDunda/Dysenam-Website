@@ -393,7 +393,7 @@ function SVGExtractGraphics(root)
 			});
 		});
 	}
-	return graphics;
+	return graphics.reverse(); // Reverse since the search was performed back-to-front
 }
 
 function GraphicsToLayers(graphics)
@@ -438,6 +438,7 @@ function ClipOccludedLayers(layers)
 	let clipper = new ClipperLib.Clipper();
 
 	return layers
+	.reverse() // Start from top layer
 	.map(
 		layer => {
 			let subj_poly = layer.poly;
