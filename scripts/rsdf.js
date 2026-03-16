@@ -557,7 +557,14 @@ function SeparateLayerIslands(layers)
 			);
 			new_layers.push(layer);
 
-			// TODO: Parse the polytree and separate disconnected islands into different layer objects
+			let expolygons = ClipperLib.JS.PolyTreeToExPolygons(polytree);
+			
+			expolygons.forEach(
+				exp => new_layers.push({
+					poly: ClipperLib.JS.ExPolygonsToPaths([exp]),
+					fill: layer.fill
+				})
+			)
 		}
 	)
 	return new_layers;
