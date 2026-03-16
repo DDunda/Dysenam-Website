@@ -1,6 +1,6 @@
 const POLY_STEP = 0.85;
 const CLEANUP_DELTA = 0.01;
-const WORKING_SCALE = 100; 
+const WORKING_SCALE = 1000; 
 
 const UNION_ID        = "UNION";
 const INTERSECTION_ID = "INTERSECTION";
@@ -90,13 +90,14 @@ function AddPaths(element, path_string, fill_colour, stroke_colour, stroke_width
 // compatible format.
 function PointsToCPoly(points)
 {
-	return points
-	.filter(p => p.length > 1)
-	.map(p => p.map(v => { return { X:v[0], Y:v[1] }; }));
+	let cpoly = points.map(p => p.map(v => { return { X:v[0], Y:v[1] }; }));
+	ClipperLib.JS.ScaleUpPaths(cpoly, WORKING_SCALE);
+	return cpoly;
 }
 
 function CPolyToPoints(cpoly)
 {
+	ClipperLib.JS.ScaleDownPaths(cpoly, WORKING_SCALE);
 	return cpoly.map(p => p.map(v => [v.X, v.Y]));
 }
 
@@ -403,24 +404,26 @@ function GraphicsToLayers(graphics)
 		segments = e.element.getPathData();
 		e.points = SegmentsToPoints(segments); // TODO: Respect stroke data by using jsclipper offset functions, and difference clipping
 
-		if (e.transform.length == 0)
+		if (e.transform.length > 0)
 		{
-			delete e.transform;
-			return e;
+			let transform = e.transform.length > 1
+			? e.transform.reduce((p,c) => p.appendItem(c), new SVGTransformList()).consolidate()
+			: e.transform[0];
+
+			let matrix = transform.matrix;
+
+			// Apply transform to get true coordinates
+			e.points = e.points.map(p => p.map(v => [
+				v[0] * matrix.a + v[1] * matrix.c + matrix.e,
+				v[0] * matrix.b + v[1] * matrix.d + matrix.f
+			]));
 		}
 
-		let transform = e.transform.length > 1
-		? e.transform.reduce((p,c) => p.appendItem(c), new SVGTransformList()).consolidate()
-		: e.transform[0];
+		e.poly = PointsToCPoly(e.points);
+		e.poly = ClipperLib.Clipper.SimplifyPolygons(e.poly, ClipperLib.PolyFillType.pftNonZero);
+		e.poly = ClipperLib.Clipper.CleanPolygons(e.poly, CLEANUP_DELTA * WORKING_SCALE);
 
-		let matrix = transform.matrix;
-
-		// Apply transform to get true coordinates
-		e.points = e.points.map(p => p.map(v => [
-			v[0] * matrix.a + v[1] * matrix.c + matrix.e,
-			v[0] * matrix.b + v[1] * matrix.d + matrix.f
-		]));
-
+		delete e.points;
 		delete e.transform;
 
 		return e;
@@ -437,11 +440,7 @@ function ClipOccludedLayers(layers)
 	return layers
 	.map(
 		layer => {
-			let subj_poly = PointsToCPoly(layer.points);
-			ClipperLib.JS.ScaleUpPaths(subj_poly, WORKING_SCALE);
-			
-			subj_poly = ClipperLib.Clipper.SimplifyPolygons(subj_poly, ClipperLib.PolyFillType.pftNonZero);
-			subj_poly = ClipperLib.Clipper.CleanPolygons(subj_poly, CLEANUP_DELTA * WORKING_SCALE);
+			let subj_poly = layer.poly;
 
 			if (clip_polys.length == 0)
 			{
@@ -473,15 +472,6 @@ function ClipOccludedLayers(layers)
 	.filter(
 		layer => layer.poly.flat(1).length > 0
 	)
-	.map(
-		layer => {
-			ClipperLib.JS.ScaleDownPaths(layer.poly, WORKING_SCALE);
-
-			layer.points = CPolyToPoints(layer.poly);
-
-			return layer;
-		}
-	)
 	.reverse();
 }
 
@@ -496,32 +486,28 @@ function FuseLayerColours(layers)
 			{
 				colour_groups[layer.fill] = [];
 			}
-			colour_groups[layer.fill].push(layer.points);
+			colour_groups[layer.fill].push(layer.poly);
 		}
 	);
 	
 	return Object.entries(colour_groups).map(
-		([colour,paths]) =>
+		([colour,polys]) =>
 		{
-			if (paths.length < 2)
+			if (polys.length < 2)
 			{
 				return {
-					points: paths[0],
+					poly: polys[0],
 					fill: colour
 				};
 			}
 
-			paths = paths.map(p1 => PointsToCPoly(p1));
-
-			let subj_poly = paths[0];
-			ClipperLib.JS.ScaleUpPaths(subj_poly, WORKING_SCALE);
+			let subj_poly = polys[0];
 
 			let clipper = new ClipperLib.Clipper();
 
-			for (let i = 1; i < paths.length; i++)
+			for (let i = 1; i < polys.length; i++)
 			{
-				let clip_poly = paths[i];
-				ClipperLib.JS.ScaleUpPaths(clip_poly, WORKING_SCALE);
+				let clip_poly = polys[i];
 
 				let solution = new ClipperLib.Paths();
 
@@ -541,14 +527,12 @@ function FuseLayerColours(layers)
 			subj_poly = ClipperLib.Clipper.SimplifyPolygons(subj_poly, ClipperLib.PolyFillType.pftNonZero);
 			subj_poly = ClipperLib.Clipper.CleanPolygons(subj_poly, CLEANUP_DELTA * WORKING_SCALE);
 
-			ClipperLib.JS.ScaleDownPaths(subj_poly, WORKING_SCALE);
-
 			return {
-				points: CPolyToPoints(subj_poly),
+				poly: subj_poly,
 				fill: colour
 			}
 		}
-	).filter(layer => layer.points.flat(1).length > 0);
+	).filter(layer => layer.poly.flat(1).length > 0);
 }
 
 function SeparateLayerIslands(layers)
@@ -563,7 +547,7 @@ function SeparateLayerIslands(layers)
 
 			// TODO: Replace this hack with a direct convertion to polytree, if it exists (I could not find it)
 			clipper.Clear();
-			clipper.AddPaths(layer.points, ClipperLib.PolyType.ptSubject, true);
+			clipper.AddPaths(layer.poly, ClipperLib.PolyType.ptSubject, true);
 			clipper.Execute(
 				ClipperLib.ClipType.ctUnion,
 				polytree,
@@ -664,7 +648,15 @@ SETTINGS.addEventListener("submit",
 			{
 				let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083);
 				//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
-				AddPaths(svg_overlay_group, PathsToString(layer.points), fill, "#F00", 1);
+				AddPaths(
+					svg_overlay_group,
+					PathsToString(
+						CPolyToPoints(layer.poly)
+					),
+					fill,
+					"#F00",
+					1
+				);
 			}
 		);
 	}
