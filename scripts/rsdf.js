@@ -39,6 +39,8 @@ const ARG_COUNT = {
 	"A": 7 // rx,ry,r,lf,sf,x,y
 }
 
+const RELATIVE_ARGS = ["m","l","h","v","z","c","s","q","t","a"];
+
 // Each argument is normalised (0-1) within the in-gamut range
 function oklch_normalised_wheel(luma, chroma, hue)
 {
@@ -56,6 +58,12 @@ function oklch_normalised_random(min_luma, max_luma, min_chroma, max_chroma, min
 
 function CreateSVGElement(name) {
 	return document.createElementNS("http://www.w3.org/2000/svg", name);
+}
+
+function PointDistance(a,b) {
+	let dx = a[0] - b[0];
+	let dy = a[1] - b[1];
+	return Math.sqrt(dx * dx + dy * dy);
 }
 
 function AddPaths(element, path_string, fill_colour, stroke_colour, stroke_width = 1)
@@ -165,13 +173,38 @@ function SegmentsToPoints(segments)
 	)
 	{
 		let type = segments[i].type;
+		let upper_type = type.toUpperCase();
 
-		if (!type in ARG_COUNT)
+		if (!upper_type in ARG_COUNT)
 			throw Error(`SegmentsToPoints: Unknown command '${type}'!`);
-		if (ARG_COUNT[type] != segments[i].values.length) 
-			throw Error(`SegmentsToPoints: Improper command args! (got ${segments[i].values.length}, expected ${ARG_COUNT[type]})`);
+
+		let args = segments[i].values.length;
+		let req_args = ARG_COUNT[upper_type];
+
+		if (args != req_args) 
+			throw Error(`SegmentsToPoints: Improper command args! (got ${args} for '${type}', expected ${req_args})`);
 
 		let values = segments[i].values;
+
+		if (type != upper_type)
+		{
+			type = upper_type;
+
+			if      (type == "H") values[0] += lastPoint[0];
+			else if (type == "V") values[0] += lastPoint[1];
+			else if (type == "A")
+			{
+				values[6] += lastPoint[0];
+				values[7] += lastPoint[1];
+			}
+			else if (type != "Z")
+			{
+				values = values.map(
+					(v,i) => (v + lastPoint[i % 2])
+				);
+			}
+		}
+
 		values.reverse(); // Reverse so popping and pushing works from the old front
 
 		if (type == "M")
@@ -184,12 +217,8 @@ function SegmentsToPoints(segments)
 			nextPoint = [ values.pop(), values.pop() ];
 
 			rPoints.push([]);
-			//d += `M`;
 			continue;
 		}
-		
-		//if (rPoints[pathIndex].length < 2)
-		//	d += "L";
 		
 		if (type == "S")
 		{
@@ -226,7 +255,7 @@ function SegmentsToPoints(segments)
 				control2[0] == nextPoint[0] && control2[1] == nextPoint[1])
 				continue;
 
-			curve.setAttributeNS(null, "d",
+			curve.setAttribute("d",
 				`M${lastPoint[0]},${lastPoint[1]} `+
 				`C${control1[0]},${control1[1]} `+
 				`${control2[0]},${control2[1]} `+
@@ -243,7 +272,7 @@ function SegmentsToPoints(segments)
 				control[0] == nextPoint[0] && control[1] == nextPoint[1])
 				continue;
 
-			curve.setAttributeNS(null, "d",
+			curve.setAttribute("d",
 				`M${lastPoint[0]},${lastPoint[1]} `+
 				`Q${control[0]},${control[1]} `+
 				`${nextPoint[0]},${nextPoint[1]} `
@@ -257,13 +286,17 @@ function SegmentsToPoints(segments)
 			let sweep = values.pop();
 			nextPoint = [ values.pop(), values.pop() ];
 
-			curve.setAttributeNS(null, "d",
+			curve.setAttribute("d",
 				`M${lastPoint[0]},${lastPoint[1]} `+
 				`A${radii[0]},${radii[1]} `+
 				`${rotation} ${large_arc} ${sweep} `+
 				`${nextPoint[0]},${nextPoint[1]} `
 			);
 		}
+
+		// Some malformed geometry fails on tiny curves
+		if (PointDistance(lastPoint, nextPoint) <= POLY_STEP)
+			continue;
 
 		let length = curve.getTotalLength();
 		let edges = Math.ceil(length / POLY_STEP);
@@ -275,17 +308,10 @@ function SegmentsToPoints(segments)
 			let point = curve.getPointAtLength(j * step);
 			let pz = [ point.x, point.y ];
 			rPoints[pathIndex].push( pz );
-			// d += `${point.x},${point.y} `;
 		}
 	}
 
-	// Remove possible space at the end of the string 
-	//d = d.replace(/ $/, "");
-	//console.log(d);
-
 	rPoints = SimplifyPoints(rPoints);
-
-	//console.log(rPoints);
 
 	return rPoints;
 }
@@ -374,7 +400,7 @@ function GraphicsToLayers(graphics)
 	return graphics
 	.filter(e => e.element.tagName && e.element.tagName.toUpperCase() == "PATH") // TODO: Support ELLIPSE, CIRCLE, POLYGON, RECT, TEXT
 	.map(e => {
-		segments = e.element.getPathData({normalize: true});
+		segments = e.element.getPathData();
 		e.points = SegmentsToPoints(segments); // TODO: Respect stroke data by using jsclipper offset functions, and difference clipping
 
 		if (e.transform.length == 0)
