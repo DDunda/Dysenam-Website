@@ -291,3 +291,11 @@ button:hover
 {
 	background-color: var(colour_accent_primary_hover);
 }
+
+.frame {
+	border-radius: var(--spacing-xs);
+	padding: var(--spacing-m);
+	margin: var(--spacing-m);
+	border-width: 1px;
+	border-color: var(--colour_accent_primary);
+}
