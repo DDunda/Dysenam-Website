@@ -649,12 +649,11 @@ SETTINGS.addEventListener("submit",
 		// TODO: 4-colour graph as basis for rsdf
 		// TODO: Render an SDF image for each colour
 		// TODO: Composite SDF images into channel packed RSDF
-		console.log(layers)
 
 		layers.forEach(
 			(layer, i) => 
 			{
-				let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083);
+				let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
 				//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
 				AddPaths(
 					svg_overlay_group,
