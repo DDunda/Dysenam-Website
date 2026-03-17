@@ -161,22 +161,23 @@ function SegmentsToPoints(segments)
 	let nextSControl = lastPoint;
 	let nextTControl = lastPoint;
 	let pathIndex = 0;
-	//let d = "";
+
+	// Used to sample along an edge
+	let curve = CreateSVGElement("path", "temp");
 
 	for (let i = 0; i < segments.length; i++,
-		//d += `${nextPoint[0]},${nextPoint[1]} `,
-		lastSControl = nextSControl,
-		lastTControl = nextTControl,
-		nextSControl = nextPoint,
-		nextTControl = nextPoint,
-		lastPoint = nextPoint,
-		rPoints[pathIndex].push(nextPoint)
+		lastSControl = [...nextSControl],
+		lastTControl = [...nextTControl],
+		nextSControl = [...nextPoint],
+		nextTControl = [...nextPoint],
+		lastPoint = [...nextPoint],
+		rPoints[pathIndex].push([...nextPoint])
 	)
 	{
 		let type = segments[i].type;
 		let upper_type = type.toUpperCase();
 
-		if (!upper_type in ARG_COUNT)
+		if (!(upper_type in ARG_COUNT))
 			throw Error(`SegmentsToPoints: Unknown command '${type}'!`);
 
 		let args = segments[i].values.length;
@@ -185,7 +186,7 @@ function SegmentsToPoints(segments)
 		if (args != req_args) 
 			throw Error(`SegmentsToPoints: Improper command args! (got ${args} for '${type}', expected ${req_args})`);
 
-		let values = segments[i].values;
+		let values = [...segments[i].values];
 
 		if (type != upper_type)
 		{
@@ -195,8 +196,8 @@ function SegmentsToPoints(segments)
 			else if (type == "V") values[0] += lastPoint[1];
 			else if (type == "A")
 			{
-				values[6] += lastPoint[0];
-				values[7] += lastPoint[1];
+				values[5] += lastPoint[0];
+				values[6] += lastPoint[1];
 			}
 			else if (type != "Z")
 			{
@@ -213,7 +214,7 @@ function SegmentsToPoints(segments)
 			if (rPoints[pathIndex].length > 1)
 				pathIndex++;
 			else
-				rPoints.pop() // Empty or single-point path
+				rPoints.pop(); // Empty or single-point path
 
 			nextPoint = [ values.pop(), values.pop() ];
 
@@ -223,15 +224,15 @@ function SegmentsToPoints(segments)
 		
 		if (type == "S")
 		{
-			values.push(lastSControl[1])
-			values.push(lastSControl[0])
-			type = "C"
+			values.push(lastSControl[1]);
+			values.push(lastSControl[0]);
+			type = "C";
 		}
 		else if (type == "T")
 		{
-			values.push(lastTControl[1])
-			values.push(lastTControl[0])
-			type = "Q"
+			values.push(lastTControl[1]);
+			values.push(lastTControl[0]);
+			type = "Q";
 		}
 		else if ("LHVZ".includes(type))
 		{
@@ -241,9 +242,6 @@ function SegmentsToPoints(segments)
 			else if (type == "Z") nextPoint = rPoints[pathIndex][0];
 			continue;
 		}
-
-		// Used to sample along an edge
-		let curve = CreateSVGElement("path", "temp");
 
 		if (type == "C")
 		{
@@ -300,6 +298,10 @@ function SegmentsToPoints(segments)
 			continue;
 
 		let length = curve.getTotalLength();
+
+		if (!length || length <= 0)
+			throw Error(`SegmentsToPoints: Length of curve is '${length}'! (${segments[i].type + segments[i].values.join(" ")})`);
+
 		let edges = Math.ceil(length / POLY_STEP);
 		let step = length / edges;
 
@@ -311,6 +313,8 @@ function SegmentsToPoints(segments)
 			rPoints[pathIndex].push( pz );
 		}
 	}
+
+	curve.remove();
 
 	rPoints = SimplifyPoints(rPoints);
 
