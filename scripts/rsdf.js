@@ -369,7 +369,7 @@ function SVGExtractGraphics(root)
 		if (!(e.element.tagName)) continue;
 
 		let tag = e.element.tagName.toUpperCase();
-		if (!SVG_ELEMENTS.some(t => t == tag)) continue;
+		if (!SVG_ELEMENTS.includes(tag)) continue;
 
 		// Is not a group; push as graphical element and continue
 		if (tag != "G")
@@ -445,12 +445,9 @@ function ClipOccludedLayers(layers)
 	.reverse() // Start from top layer
 	.map(
 		layer => {
-			let subj_poly = layer.poly;
-
 			if (clip_polys.length == 0)
 			{
-				clip_polys = clip_polys.concat(subj_poly);
-				layer.poly = subj_poly;
+				clip_polys = clip_polys.concat(layer.poly);
 				return layer;
 			}
 
@@ -458,7 +455,7 @@ function ClipOccludedLayers(layers)
 
 			// TODO: Respect transparency and non-opaque blend modes with separate stack
 			clipper.Clear();
-			clipper.AddPaths(subj_poly, ClipperLib.PolyType.ptSubject, true);
+			clipper.AddPaths(layer.poly, ClipperLib.PolyType.ptSubject, true);
 			clipper.AddPaths(clip_polys, ClipperLib.PolyType.ptClip, true);
 			clipper.Execute(
 				ClipperLib.ClipType.ctDifference,
@@ -467,7 +464,7 @@ function ClipOccludedLayers(layers)
 				ClipperLib.PolyFillType.pftNonZero
 			);
 
-			clip_polys = clip_polys.concat(subj_poly);
+			clip_polys = clip_polys.concat(layer.poly);
 
 			layer.poly = solution_paths;
 
@@ -559,7 +556,6 @@ function SeparateLayerIslands(layers)
 				ClipperLib.PolyFillType.pftNonZero,
 				ClipperLib.PolyFillType.pftNonZero
 			);
-			new_layers.push(layer);
 
 			let expolygons = ClipperLib.JS.PolyTreeToExPolygons(polytree);
 			
