@@ -321,6 +321,53 @@ function SegmentsToPoints(segments)
 	return rPoints;
 }
 
+function SVGRectToPoints(rect)
+{
+	let x = Number(rect.getAttribute("x") || 0);
+	let y = Number(rect.getAttribute("y") || 0);
+	let w = Number(rect.getAttribute("width") || 0);
+	let h = Number(rect.getAttribute("height") || 0);
+	let rx = Number(rect.getAttribute("rx") || rect.getAttribute("ry") || 0);
+	let ry = Number(rect.getAttribute("ry") || rect.getAttribute("rx") || 0);
+
+	if (rx == 0 || ry == 0)
+	{
+		return [[
+			[x,y],[x+w,y],[x+w,y+h],[x,y+h]
+		]];
+	}
+
+	let segments = [
+		{type: "M", values: [x + rx, y]},
+		{type: "h", values: [w - rx * 2], value: w - rx * 2},
+		{type: "a", values: [rx,ry,0,0,1,rx,ry]},
+		{type: "v", values: [h - ry * 2], value: h - ry * 2},
+		{type: "a", values: [rx,ry,0,0,1,-rx,ry]},
+		{type: "h", values: [-(w - rx * 2)], value: -(w - rx * 2)},
+		{type: "a", values: [rx,ry,0,0,1,-rx,-ry]},
+		{type: "v", values: [-(h - ry * 2)], value: -(h - ry * 2)},
+		{type: "a", values: [rx,ry,0,0,1,rx,-ry]}
+	];
+
+	return SegmentsToPoints(segments);
+}
+
+function SVGPathToPoints(path)
+{
+	return SegmentsToPoints(path.getPathData());
+}
+
+function SVGElementToPoints(element)
+{
+	let tag = element.tagName.toUpperCase();
+	switch(tag)
+	{
+		case "RECT": return SVGRectToPoints(element);
+		case "PATH": return SVGPathToPoints(element);
+	}
+	throw Error(`SVGElementToPoints: Unknown element tag '${element.tagName}'`);
+}
+
 // Takes an svg path as a string, and converts
 // it to a format usable by JsClipper.
 function SegmentsToCPoly(segments)
@@ -403,10 +450,10 @@ function SVGExtractGraphics(root)
 function GraphicsToLayers(graphics)
 {
 	return graphics
-	.filter(e => e.element.tagName && e.element.tagName.toUpperCase() == "PATH") // TODO: Support ELLIPSE, CIRCLE, POLYGON, RECT, TEXT
+	.filter(e => e.element.tagName && ["PATH","RECT"].includes(e.element.tagName.toUpperCase())) // TODO: Support ELLIPSE, CIRCLE, POLYGON, TEXT
 	.map(e => {
-		segments = e.element.getPathData();
-		e.points = SegmentsToPoints(segments); // TODO: Respect stroke data by using jsclipper offset functions, and difference clipping
+		e.points = SVGElementToPoints(e.element);
+		// TODO: Respect stroke data by using jsclipper offset functions, and difference clipping
 
 		if (e.transform.length > 0)
 		{
