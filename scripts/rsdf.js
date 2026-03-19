@@ -1,6 +1,7 @@
 const POLY_STEP = 1.0 / 256.0;
 const CLEANUP_DELTA = POLY_STEP / 16.0;
 const WORKING_SCALE = 65536.0;
+const DEBUG_LINE_THICKNESS = 1.0 / 512.0;
 let svg_size = 5;
 
 const UNION_ID        = "UNION";
@@ -798,7 +799,7 @@ SETTINGS.addEventListener("submit",
 					PathsToString(layer.points),
 					fill,
 					"#777",
-					svg_size / 512.0
+					svg_size * DEBUG_LINE_THICKNESS
 				);
 			}
 		);
@@ -817,7 +818,7 @@ SETTINGS.addEventListener("submit",
 							line,
 							{
 								stroke: "#F00",
-								"stroke-width": svg_size / 512.0,
+								"stroke-width": svg_size * DEBUG_LINE_THICKNESS,
 								"stroke-linejoin": "round",
 								x1: layer.center[0],
 								y1: layer.center[1],
@@ -841,11 +842,11 @@ SETTINGS.addEventListener("submit",
 					{
 						fill: fill,
 						stroke: "#F00",
-						"stroke-width": svg_size / 512.0,
+						"stroke-width": svg_size * DEBUG_LINE_THICKNESS,
 						"stroke-linejoin": "round",
 						cx: layer.center[0],
 						cy: layer.center[1],
-						r: svg_size / 128.0
+						r: svg_size * DEBUG_LINE_THICKNESS * 4
 					}
 				);
 				
