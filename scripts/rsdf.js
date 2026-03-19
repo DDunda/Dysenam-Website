@@ -1,6 +1,7 @@
-const POLY_STEP = 0.85;
-const CLEANUP_DELTA = 0.01;
-const WORKING_SCALE = 1000; 
+const POLY_STEP = 1.0 / 256.0;
+const CLEANUP_DELTA = POLY_STEP / 16.0;
+const WORKING_SCALE = 65536.0;
+let svg_size = 5;
 
 const UNION_ID        = "UNION";
 const INTERSECTION_ID = "INTERSECTION";
@@ -56,6 +57,25 @@ function oklch_normalised_random(min_luma, max_luma, min_chroma, max_chroma, min
 	return oklch_normalised_wheel(rand_luma, rand_chroma, rand_hue);
 }
 
+// Consider this a multiplication in the form:
+// ┌             ┐   ┌     ┐
+// │ m.a m.c m.e │   | v.0 │
+// │ m.b m.d m.f │ × │ v.1 │
+// │  0   0   1  │   |  1  │
+// └             ┘   └     ┘
+function SVGMatMulVec(m,v)
+{
+	return [
+		v[0] * m.a + v[1] * m.c + m.e,
+		v[0] * m.b + v[1] * m.d + m.f,
+	];
+}
+
+function PointsEqual(a,b)
+{
+	return a[0] == b[0] && a[1] == b[1];
+}
+
 function CreateSVGElement(name) {
 	return document.createElementNS("http://www.w3.org/2000/svg", name);
 }
@@ -66,22 +86,28 @@ function PointDistance(a,b) {
 	return Math.sqrt(dx * dx + dy * dy);
 }
 
+function SetAttributes(element, attributes)
+{
+	Object.entries(attributes).forEach(
+		([k,v]) => element.setAttribute(k,v)
+	);
+}
+
 function AddPaths(element, path_string, fill_colour, stroke_colour, stroke_width = 1)
 {
 	let path = CreateSVGElement("path");
 
-	let attributes = {
-		"d": path_string,
-		"stroke": stroke_colour,
-		"vector-effect": "non-scaling-stroke",
-		"stroke-width": stroke_width,
-		"fill": fill_colour,
-		"stroke-linejoin": "round",
-		"stroke-linecap": "round",
-	};
-
-	Object.entries(attributes)
-	.forEach(([key,value]) => path.setAttribute(key, value));
+	SetAttributes(
+		path,
+		{
+			"d": path_string,
+			"stroke": stroke_colour,
+			"stroke-width": stroke_width,
+			"fill": fill_colour,
+			"stroke-linejoin": "round",
+			"stroke-linecap": "round",
+		}
+	);
 
 	element.appendChild(path);   
 }
@@ -90,14 +116,14 @@ function AddPaths(element, path_string, fill_colour, stroke_colour, stroke_width
 // compatible format.
 function PointsToCPoly(points)
 {
-	let cpoly = points.map(p => p.map(v => { return { X:v[0], Y:v[1] }; }));
-	ClipperLib.JS.ScaleUpPaths(cpoly, WORKING_SCALE);
+	let cpoly = points.map(p => p.map(v => ({ X:v[0], Y:v[1] })));
+	ClipperLib.JS.ScaleUpPaths(cpoly, WORKING_SCALE / svg_size);
 	return cpoly;
 }
 
 function CPolyToPoints(cpoly)
 {
-	ClipperLib.JS.ScaleDownPaths(cpoly, WORKING_SCALE);
+	ClipperLib.JS.ScaleDownPaths(cpoly, WORKING_SCALE / svg_size);
 	return cpoly.map(p => p.map(v => [v.X, v.Y]));
 }
 
@@ -119,29 +145,37 @@ function PathsToString(paths)
 
 function SimplifyPoints(points)
 {
-	let pts = points.map((p) => {
-		while (p.length > 1 &&
-			p[0][0] == p[p.length - 1][0] &&
-			p[0][1] == p[p.length - 1][1])
-			p.pop();
+	return points
+	.filter(p => p.length > 1)
+	.map(p => p
+		.slice(1)
+		.reduce(
+			(prev,cur) => !PointsEqual(cur,prev.at(-1))
+				? prev.concat([cur])
+				: prev,
+			[p[0]]
+		)
+	)
+	.filter(p => p.length > 1);
+}
 
-		if (p.length < 2)
-			return [];
-
-		let subpath = [p[0]];
-		for (let j = 1; j < p.length; j++)
-		{
-			if (p[j-1][0] == p[j][0] &&
-				p[j-1][1] == p[j][1]) 
-				continue;
-
-			subpath.push(p[j]);
-		}
-		return subpath;
-	})
-	.filter((p) => { return p.length > 0; });
-
-	return pts;
+// Using a mean of points for now.
+// For a more accurate center, the points may be
+// triangulated and combined with a corresponding "mass".
+function PointsToCenter(points)
+{
+	let sum = [0,0];
+	let count = 0;
+	points.forEach(
+		p => p.forEach(
+			v => {
+				sum[0] += v[0];
+				sum[1] += v[1];
+				count++;
+			}
+		)
+	);
+	return count > 0 ? [sum[0] / count, sum[1] / count] : undefined;
 }
 
 // Takes an svg as segments, and converts them
@@ -151,54 +185,59 @@ function SimplifyPoints(points)
 function SegmentsToPoints(segments)
 {
 	if (segments.length == 0)
-		throw Error("SegmentsToPoints: No segments!");
+		return [];
 
-	let rPoints = [[[0,0]]];
-	let lastPoint = [0,0];
-	let lastSControl = lastPoint;
-	let lastTControl = lastPoint;
-	let nextPoint = lastPoint;
-	let nextSControl = lastPoint;
-	let nextTControl = lastPoint;
-	let pathIndex = 0;
+	let curPath = [];
+	let rPoints = [curPath];
+	let lastPoint = undefined;
+	let lastSControl = undefined;
+	let lastTControl = undefined;
+	let nextPoint = [0,0];
+	let nextSControl = undefined;
+	let nextTControl = undefined;
 
 	// Used to sample along an edge
 	let curve = CreateSVGElement("path", "temp");
 
-	for (let i = 0; i < segments.length; i++,
-		lastSControl = [...nextSControl],
-		lastTControl = [...nextTControl],
-		nextSControl = [...nextPoint],
-		nextTControl = [...nextPoint],
-		lastPoint = [...nextPoint],
-		rPoints[pathIndex].push([...nextPoint])
-	)
+	segments.forEach(segment =>
 	{
-		let type = segments[i].type;
+		if (nextPoint)
+		{
+			curPath.push([...nextPoint]);
+			lastPoint = nextPoint;
+		}
+		
+		lastSControl = nextSControl ?? lastPoint;
+		lastTControl = nextTControl ?? lastPoint;
+		nextSControl = undefined;
+		nextTControl = undefined;
+		nextPoint = undefined;
+		
+		let type = segment.type;
 		let upper_type = type.toUpperCase();
 
 		if (!(upper_type in ARG_COUNT))
 			throw Error(`SegmentsToPoints: Unknown command '${type}'!`);
 
-		let args = segments[i].values.length;
+		let args = segment.values.length;
 		let req_args = ARG_COUNT[upper_type];
 
 		if (args != req_args) 
 			throw Error(`SegmentsToPoints: Improper command args! (got ${args} for '${type}', expected ${req_args})`);
 
-		let values = [...segments[i].values];
+		let values = [...segment.values];
 
 		if (type != upper_type)
 		{
 			type = upper_type;
 
-			if      (type == "H") values[0] += lastPoint[0];
-			else if (type == "V") values[0] += lastPoint[1];
-			else if (type == "A")
+			if (type == "A")
 			{
 				values[5] += lastPoint[0];
 				values[6] += lastPoint[1];
 			}
+			else if (type == "H") values[0] += lastPoint[0];
+			else if (type == "V") values[0] += lastPoint[1];
 			else if (type != "Z")
 			{
 				values = values.map(
@@ -211,71 +250,54 @@ function SegmentsToPoints(segments)
 
 		if (type == "M")
 		{
-			if (rPoints[pathIndex].length > 1)
-				pathIndex++;
-			else
+			if (curPath.length <= 1)
 				rPoints.pop(); // Empty or single-point path
 
 			nextPoint = [ values.pop(), values.pop() ];
 
-			rPoints.push([]);
-			continue;
+			curPath = []
+			rPoints.push(curPath);
+			return;
 		}
 		
-		if (type == "S")
-		{
-			values.push(lastSControl[1]);
-			values.push(lastSControl[0]);
-			type = "C";
-		}
-		else if (type == "T")
-		{
-			values.push(lastTControl[1]);
-			values.push(lastTControl[0]);
-			type = "Q";
-		}
-		else if ("LHVZ".includes(type))
+		if ("LHVZ".includes(type))
 		{
 			if      (type == "L") nextPoint = [ values.pop(), values.pop() ];
-			else if (type == "H") nextPoint[0] = values.pop();
-			else if (type == "V") nextPoint[1] = values.pop();
-			else if (type == "Z") nextPoint = rPoints[pathIndex][0];
-			continue;
+			else if (type == "H") nextPoint = [ values.pop(), lastPoint[1] ];
+			else if (type == "V") nextPoint = [ lastPoint[0], values.pop() ];
+			else if (type == "Z") nextPoint = curPath[0];
+			return;
 		}
+		
+		let d = `M${lastPoint[0]},${lastPoint[1]} `
 
-		if (type == "C")
-		{
-			let control1 = [ values.pop(), values.pop() ];
+		if (type == "C" || type == "S")
+		{			
+			let control1 = type == "C"
+				? [ values.pop(), values.pop() ]
+				: lastSControl;
 			let control2 = [ values.pop(), values.pop() ];
 			nextPoint = [ values.pop(), values.pop() ];
 			nextSControl = [ 2 * nextPoint[0] - control2[0], 2 * nextPoint[1] - control2[1] ];
 
-			if (control1[0] == lastPoint[0] && control1[1] == lastPoint[1] &&
-				control2[0] == nextPoint[0] && control2[1] == nextPoint[1])
-				continue;
+			if ((PointsEqual(control1,lastPoint) || PointsEqual(control1,nextPoint)) &&
+				(PointsEqual(control2,lastPoint) || PointsEqual(control2,nextPoint)))
+				return;
 
-			curve.setAttribute("d",
-				`M${lastPoint[0]},${lastPoint[1]} `+
-				`C${control1[0]},${control1[1]} `+
-				`${control2[0]},${control2[1]} `+
-				`${nextPoint[0]},${nextPoint[1]} `
-			);
+			d += `C${control1[0]},${control1[1]} ${control2[0]},${control2[1]}`;
 		}
-		else if (type == "Q")
-		{
-			let control = [ values.pop(), values.pop() ];
+		else if (type == "Q" || type == "T")
+		{			
+			let control = type == "Q"
+				? [ values.pop(), values.pop() ]
+				: lastTControl;
 			nextPoint = [ values.pop(), values.pop() ];
 			nextTControl = [ 2 * nextPoint[0] - control[0], 2 * nextPoint[1] - control[1] ];
 
-			if (control[0] == lastPoint[0] && control[1] == lastPoint[1] ||
-				control[0] == nextPoint[0] && control[1] == nextPoint[1])
-				continue;
+			if (PointsEqual(control,lastPoint) || PointsEqual(control, nextPoint))
+				return;
 
-			curve.setAttribute("d",
-				`M${lastPoint[0]},${lastPoint[1]} `+
-				`Q${control[0]},${control[1]} `+
-				`${nextPoint[0]},${nextPoint[1]} `
-			);
+			d += `Q${control[0]},${control[1]}`;
 		}
 		else // A
 		{
@@ -284,25 +306,23 @@ function SegmentsToPoints(segments)
 			let large_arc = values.pop();
 			let sweep = values.pop();
 			nextPoint = [ values.pop(), values.pop() ];
-
-			curve.setAttribute("d",
-				`M${lastPoint[0]},${lastPoint[1]} `+
-				`A${radii[0]},${radii[1]} `+
-				`${rotation} ${large_arc} ${sweep} `+
-				`${nextPoint[0]},${nextPoint[1]} `
-			);
+				
+			d += `A${radii[0]},${radii[1]} ${rotation} ${large_arc} ${sweep}`;
 		}
+		
+		d += ` ${nextPoint[0]},${nextPoint[1]}`;
+		curve.setAttribute("d",d);
 
 		// Some malformed geometry fails on tiny curves
-		if (PointDistance(lastPoint, nextPoint) <= POLY_STEP)
-			continue;
+		if (PointDistance(lastPoint, nextPoint) <= POLY_STEP * svg_size)
+			return;
 
 		let length = curve.getTotalLength();
 
-		if (!length || length <= 0)
+		if (length < 0)
 			throw Error(`SegmentsToPoints: Length of curve is '${length}'! (${segments[i].type + segments[i].values.join(" ")})`);
 
-		let edges = Math.ceil(length / POLY_STEP);
+		let edges = Math.ceil(length / (POLY_STEP * svg_size));
 		let step = length / edges;
 
 		// Sample points along curve to create a polygon
@@ -310,25 +330,26 @@ function SegmentsToPoints(segments)
 		{
 			let point = curve.getPointAtLength(j * step);
 			let pz = [ point.x, point.y ];
-			rPoints[pathIndex].push( pz );
+			curPath.push( pz );
 		}
-	}
+	});
 
 	curve.remove();
 
-	rPoints = SimplifyPoints(rPoints);
+	if (nextPoint)
+		curPath.push(nextPoint);
 
-	return rPoints;
+	return SimplifyPoints(rPoints);
 }
 
 function SVGRectToPoints(rect)
 {
-	let x = Number(rect.getAttribute("x") || 0);
-	let y = Number(rect.getAttribute("y") || 0);
-	let w = Number(rect.getAttribute("width") || 0);
-	let h = Number(rect.getAttribute("height") || 0);
-	let rx = Number(rect.getAttribute("rx") || rect.getAttribute("ry") || 0);
-	let ry = Number(rect.getAttribute("ry") || rect.getAttribute("rx") || 0);
+	let x = Number(rect.getAttribute("x") ?? 0);
+	let y = Number(rect.getAttribute("y") ?? 0);
+	let w = Number(rect.getAttribute("width") ?? 0);
+	let h = Number(rect.getAttribute("height") ?? 0);
+	let rx = Number((rect.getAttribute("rx") ?? rect.getAttribute("ry")) ?? 0);
+	let ry = Number((rect.getAttribute("ry") ?? rect.getAttribute("rx")) ?? 0);
 
 	if (rx == 0 || ry == 0)
 	{
@@ -398,22 +419,17 @@ function IdToCPoly(id)
 function SVGExtractGraphics(root)
 {
 	let graphics = [];
-	let to_visit = Array.from(root.childNodes)
-	.filter(e => e.tagName) // Remove text (newlines, spaces...)
-	.map(e => (
+	let to_visit = Array.from(root.children)
+	.map(child => (
 		{
-			element: e,
-			transform: e.transform
-				? Array.from(e.transform.baseVal)
-				: [],
+			element: child,
+			matrix: child.transform?.baseVal.consolidate()?.matrix ?? new DOMMatrix()
 		}
 	));
 
 	while (to_visit.length > 0)
 	{
 		let e = to_visit.pop();
-
-		if (!(e.element.tagName)) continue;
 
 		let tag = e.element.tagName.toUpperCase();
 		if (!SVG_ELEMENTS.includes(tag)) continue;
@@ -431,18 +447,17 @@ function SVGExtractGraphics(root)
 		}
 
 		// Add the group's children to be visited
-		Array.from(e.element.childNodes)
-		.filter(c => c.tagName)
-		.forEach(c => {
-			to_visit.push({
-				element: c,
-				transform: e.transform.concat(
-					c.transform
-						? Array.from(c.transform.baseVal)
-						: []
-				),
-			});
-		});
+		Array.from(e.element.children)
+		.forEach(
+			child => to_visit.push({
+				element: child,
+				matrix: (child.transform?.baseVal.numberOfItems ?? 0) > 0
+					? DOMMatrix.fromMatrix(e.matrix).multiplySelf(
+						child.transform.baseVal.consolidate().matrix
+					)
+					: e.matrix
+			}),
+		);
 	}
 	return graphics.reverse(); // Reverse since the search was performed back-to-front
 }
@@ -455,19 +470,14 @@ function GraphicsToLayers(graphics)
 		e.points = SVGElementToPoints(e.element);
 		// TODO: Respect stroke data by using jsclipper offset functions, and difference clipping
 
-		if (e.transform.length > 0)
+		if (!e.matrix.isIdentity)
 		{
-			let transform = e.transform.length > 1
-			? e.transform.reduce((p,c) => p.appendItem(c), new SVGTransformList()).consolidate()
-			: e.transform[0];
-
-			let matrix = transform.matrix;
+			let matrix = e.matrix;
 
 			// Apply transform to get true coordinates
-			e.points = e.points.map(p => p.map(v => [
-				v[0] * matrix.a + v[1] * matrix.c + matrix.e,
-				v[0] * matrix.b + v[1] * matrix.d + matrix.f
-			]));
+			e.points = e.points.map(p => p.map(v => 
+				SVGMatMulVec(matrix, v)
+			));
 		}
 
 		e.poly = PointsToCPoly(e.points);
@@ -475,7 +485,7 @@ function GraphicsToLayers(graphics)
 		e.poly = ClipperLib.Clipper.CleanPolygons(e.poly, CLEANUP_DELTA * WORKING_SCALE);
 
 		delete e.points;
-		delete e.transform;
+		delete e.matrix;
 
 		return e;
 	});
@@ -617,6 +627,77 @@ function SeparateLayerIslands(layers)
 	return new_layers;
 }
 
+function ConnectLayers(layers)
+{
+	let minX = Number.POSITIVE_INFINITY;
+	let maxX = Number.NEGATIVE_INFINITY;
+	let minY = Number.POSITIVE_INFINITY;
+	let maxY = Number.NEGATIVE_INFINITY;
+
+	let connections = [
+		...layers.reduce(
+			(p1,layer,layerIndex) => layer.poly.reduce(
+				(p2,path) => path.reduce(
+					(p3,v,i) =>
+					{
+						let v1 = {X:v.X,Y:v.Y};
+						let v2 = path[(i + 1) % path.length];
+						v2 = {X:v2.X,Y:v2.Y};
+						if (v2.X < v1.X) [v1,v2] = [v2,v1];
+						
+						let edge = `${v1.X},${v1.Y},${v2.X},${v2.Y}`;
+						
+						if (v2.Y < v1.Y) [v1.Y,v2.Y] = [v2.Y,v1.Y];
+						if (v1.X < minX) minX = v1.X;
+						if (v2.X > maxX) maxX = v2.X;
+						if (v1.Y < minY) minY = v1.Y;
+						if (v2.Y > maxY) maxY = v2.Y;
+						
+						if (!p3.has(edge))
+							p3.set(edge,[]);
+						
+						p3.get(edge).push(layerIndex);
+						return p3;
+					},
+					p2
+				),
+				p1
+			),
+			new Map()
+		)
+	]
+	.filter(
+		([k,v]) => v.length > 1
+	)
+	.reduce((nodeList,[k,v]) => 
+		{
+			if (!(v[0] in nodeList))
+				nodeList[v[0]] = new Set();
+			if (!(v[1] in nodeList))
+				nodeList[v[1]] = new Set();
+			
+			nodeList[v[0]].add(v[1]);
+			nodeList[v[1]].add(v[0]);
+			
+			return nodeList;
+		},
+		{}
+	);
+	
+	layers.forEach(
+		(layer, layerIndex) =>
+			layer.connections = [...(connections?.[layerIndex] ?? [])]
+			.map(
+				connectionIndex => ({
+					layer: layers[connectionIndex],
+					index: connectionIndex
+				})
+			)
+	);
+	
+	return layers;
+}
+
 const UPLOAD_INPUT = document.getElementById("upload_input");
 const SVG_NAME = document.getElementById("input_preview_name");
 const SVG_PREVIEW = document.getElementById("input_preview_svg");
@@ -634,11 +715,8 @@ UPLOAD_INPUT.addEventListener("change",
 	{
 		svg_overlay_group = null;
 
-		if (svg_input)
-		{
-			svg_input.remove();
-			svg_input = null;
-		}
+		svg_input?.remove();
+		svg_input = null;
 
 		let file = e.target.files[0];
 
@@ -675,28 +753,41 @@ SETTINGS.addEventListener("submit",
 	{
 		e.preventDefault();
 
-		if (svg_overlay_group)
-		{
-			svg_overlay_group.innerHTML = "";
-		}
-		else
-		{
-			svg_overlay_group = CreateSVGElement("g","overlay")
-			svg_input.appendChild(svg_overlay_group);
-		}
-
+		svg_overlay_group?.remove();
+		svg_overlay_group = null;
+			
 		// TODO?: Support high-resolution bitmaps (completely different pipeline, but common use-case)
 		if (!svg_input) return;
+		
+		let viewbox = svg_input.getAttribute("viewBox");
+		
+		if (!viewbox)
+			throw new Error("SVG has no viewBox!");
+		
+		viewbox = viewbox.split(/\s+|,/);
+		
+		svg_size = Math.max(viewbox[2],viewbox[3]);
+		
 		let graphics = SVGExtractGraphics(svg_input);
 		let layers = GraphicsToLayers(graphics);
 		layers = ClipOccludedLayers(layers);
 		layers = FuseLayerColours(layers);
 		layers = SeparateLayerIslands(layers);
-		// TODO: Construct graph from region adjacency
+		layers = ConnectLayers(layers);
 		// TODO: 4-colour graph as basis for rsdf
 		// TODO: Render an SDF image for each colour
 		// TODO: Composite SDF images into channel packed RSDF
+		
+		svg_overlay_group = CreateSVGElement("g","overlay")
+		svg_input.appendChild(svg_overlay_group);
 
+		layers.forEach(
+			layer => {
+				layer.points = CPolyToPoints(layer.poly);
+				layer.center = PointsToCenter(layer.points);
+			}
+		);
+		
 		layers.forEach(
 			(layer, i) => 
 			{
@@ -704,14 +795,62 @@ SETTINGS.addEventListener("submit",
 				//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
 				AddPaths(
 					svg_overlay_group,
-					PathsToString(
-						CPolyToPoints(layer.poly)
-					),
+					PathsToString(layer.points),
 					fill,
-					"#F00",
-					1
+					"#777",
+					svg_size / 512.0
 				);
 			}
 		);
+		
+		layers.forEach(
+			(layer, i) =>
+			{
+				layer.connections.forEach(
+					connection => {
+						if (connection.index < i)
+							return;
+						
+						let line = CreateSVGElement("line");
+				
+						SetAttributes(
+							line,
+							{
+								stroke: "#F00",
+								"stroke-width": svg_size / 512.0,
+								"stroke-linejoin": "round",
+								x1: layer.center[0],
+								y1: layer.center[1],
+								x2: connection.layer.center[0],
+								y2: connection.layer.center[1],
+								r: 5
+							}
+						);
+						
+						svg_overlay_group.appendChild(line);
+					}
+				);
+				
+				let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
+				//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
+				
+				let circle = CreateSVGElement("circle");
+				
+				SetAttributes(
+					circle,
+					{
+						fill: fill,
+						stroke: "#F00",
+						"stroke-width": svg_size / 512.0,
+						"stroke-linejoin": "round",
+						cx: layer.center[0],
+						cy: layer.center[1],
+						r: svg_size / 128.0
+					}
+				);
+				
+				svg_overlay_group.appendChild(circle);
+			}
+		)
 	}
 );
