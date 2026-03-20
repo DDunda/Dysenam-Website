@@ -12,6 +12,28 @@ const INTERSECTION_ID = "INTERSECTION";
 const DIFFERENCE_ID   = "DIFFERENCE";
 const XOR_ID          = "XOR";
 
+const UNKNOWN_COLOUR = -1;
+const COLOUR1_COLOUR = 1;
+const COLOUR2_COLOUR = 2;
+const COLOUR3_COLOUR = 3;
+const COLOUR4_COLOUR = 4;
+
+const GRAPH_COLOURS = new Set([
+	UNKNOWN_COLOUR,
+	COLOUR1_COLOUR,
+	COLOUR2_COLOUR,
+	COLOUR3_COLOUR,
+	COLOUR4_COLOUR
+]);
+
+const VISUALISATION_COLOURS = new Map([
+	[UNKNOWN_COLOUR, "oklch(0.719 0.0000   0.00)"],
+	[COLOUR1_COLOUR, "oklch(0.719 0.1635  59.72)"],
+	[COLOUR2_COLOUR, "oklch(0.719 0.1635 149.72)"],
+	[COLOUR3_COLOUR, "oklch(0.719 0.1635 239.72)"],
+	[COLOUR4_COLOUR, "oklch(0.719 0.1635 329.72)"]
+]);
+
 const ID_MAP = {
 	[UNION_ID]:        ClipperLib.ClipType.ctUnion,
 	[INTERSECTION_ID]: ClipperLib.ClipType.ctIntersection,
@@ -740,6 +762,171 @@ function ConnectLayers(layers)
 	return layers;
 }
 
+function GetPossibleLayerColours(layer)
+{
+	return new Set(
+		[...layer.neighbour_colours]
+		.filter(([k,v]) => k != UNKNOWN_COLOUR && v == 0)
+		.map(([k,v]) => k)
+	);
+}
+
+function MarkLayerColour(layer, colour)
+{
+	if (layer.graph_colour == colour)
+		return;
+
+	layer.connections.forEach(
+		c => {
+			c.layer.neighbour_colours.set(
+				layer.graph_colour,
+				c.layer.neighbour_colours.get(
+					layer.graph_colour
+				 ) - 1
+			);
+			c.layer.neighbour_colours.set(
+				colour,
+				c.layer.neighbour_colours.get(
+					colour
+				 ) + 1
+			);
+		}
+	);
+
+	layer.graph_colour = colour;
+}
+
+function GraphColourLayers(layers)
+{
+	if (layers.length == 0)
+		return;
+
+	let input = new Set();
+	let unknown = new Set();
+
+	layers
+	.forEach((layer,i) => {
+		input.add(i);
+		unknown.add(i);
+		layer.graph_colour ??= UNKNOWN_COLOUR;
+	});
+	layers
+	.forEach(layer => {
+		layer.neighbour_colours = new Map([
+			[COLOUR1_COLOUR,0],
+			[COLOUR2_COLOUR,0],
+			[COLOUR3_COLOUR,0],
+			[COLOUR4_COLOUR,0],
+			[UNKNOWN_COLOUR,0]
+		]);
+		layer.connections.forEach(connection =>
+			layer.neighbour_colours.set(
+				connection.layer.graph_colour, 
+				layer.neighbour_colours.get(
+					connection.layer.graph_colour
+				) + 1
+			)
+		);
+	});
+
+	let trivialGroups = [];
+
+	do
+	{
+		// TODO: modify trivial extraction, and forced placement,
+		// to only check dirty nodes.
+		for (let i = 0; i < input.size; i++)
+		{
+			let li = [...input][i];
+			let layer = layers[li];
+			let possibleColours = GetPossibleLayerColours(layer);
+
+			if (possibleColours.size > 1)
+				continue;
+
+			if (possibleColours.size == 0)
+				throw new Error("Cannot colour graph!");				
+
+			MarkLayerColour(layer,[...possibleColours][0]);
+			input.delete(li);
+			i = -1;
+		}
+
+		if (input.size == 0)
+			break;
+
+		let trivial = new Set(
+			[...input]
+			.filter(li => {
+				let possibleColours = GetPossibleLayerColours(layers[li])
+				.size;
+
+				let unknownNeighbours = layers[li]
+				.connections
+				.filter(connection =>
+					input.has(connection.index) &&
+					connection.layer.graph_colour == UNKNOWN_COLOUR
+				).length;
+
+				return possibleColours > unknownNeighbours;
+			})
+		);
+
+		if (trivial.size > 0) 
+		{
+			trivialGroups.push(trivial);
+			input = input.difference(trivial);
+			continue;
+		}
+
+		// TODO: Replace sort by neighbour count with a sort by odd cycle count
+		let mostConnected = [...input]
+		.slice(1)
+		.reduce((p,c) =>
+			layers[c].connections.length > layers[p].connections.length
+				? c
+				: p,
+			[...input][0]
+		);
+
+		// TODO: Add more sophisticated code for cases where naive placement fails
+		// (Create a solver function that checks if a result is possible)
+
+		MarkLayerColour(
+			layers[mostConnected],
+			[...GetPossibleLayerColours(
+				layers[mostConnected]
+			)][0]
+		);
+
+		input.delete(mostConnected);
+	}
+	while (input.size > 0);
+
+	// TODO: Add code to maximise distance between repeated colours
+	trivialGroups
+	.reverse()
+	.forEach(tg =>
+		[...tg].sort((a,b) =>
+			layers[a].neighbour_colours.get(UNKNOWN_COLOUR) -
+			layers[b].neighbour_colours.get(UNKNOWN_COLOUR)
+		)
+		.forEach(li => { 
+			let colours = [...GetPossibleLayerColours(
+				layers[li]
+			)];
+			MarkLayerColour(
+				layers[li],
+				// TODO: Replace random selection with
+				// deterministic distance-optimised colour
+				colours[Math.floor(Math.random() * colours.length)]
+			);
+		})
+	);
+	
+	return layers;
+}
+
 const UPLOAD_INPUT = document.getElementById("upload_input");
 const SVG_NAME = document.getElementById("input_preview_name");
 const SVG_PREVIEW = document.getElementById("input_preview_svg");
@@ -817,7 +1004,7 @@ SETTINGS.addEventListener("submit",
 		layers = SeparateLayerPolys(layers);
 		layers = CullSmallLayers(layers);
 		layers = ConnectLayers(layers);
-		// TODO: 4-colour graph as basis for rsdf
+		layers = GraphColourLayers(layers);
 		// TODO: Render an SDF image for each colour
 		// TODO: Composite SDF images into channel packed RSDF
 		
@@ -834,7 +1021,8 @@ SETTINGS.addEventListener("submit",
 		layers.forEach(
 			(layer, i) => 
 			{
-				let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
+				let fill = VISUALISATION_COLOURS.get(layer.graph_colour);
+				//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
 				//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
 				AddPaths(
 					svg_overlay_group,
@@ -874,7 +1062,8 @@ SETTINGS.addEventListener("submit",
 					}
 				);
 				
-				let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
+				let fill = VISUALISATION_COLOURS.get(layer.graph_colour);
+				//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
 				//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
 				
 				let circle = CreateSVGElement("circle");
