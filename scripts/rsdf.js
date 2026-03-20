@@ -1,9 +1,10 @@
-const POLY_STEP = 1.0 / 2048.0;
-const CLEANUP_DELTA = POLY_STEP / 16.0;
-const WORKING_SCALE = 65536.0;
-const DEBUG_LINE_THICKNESS = 1.0 / 2048.0;
-const ADJACENCY_MAX_DISTANCE = POLY_STEP / 4.0;
-const ADJACENCY_ANGLE_STEPS = 256.0;
+const POLY_STEP = Math.pow(2,-11);
+const CLEANUP_DELTA = POLY_STEP * Math.pow(2,-4);
+const WORKING_SCALE = Math.pow(2,16);
+const DEBUG_LINE_THICKNESS = Math.pow(2,-11);
+const ADJACENCY_MAX_DISTANCE = POLY_STEP * Math.pow(2,-1);
+const ADJACENCY_ANGLE_STEPS = Math.pow(2,8);
+const MIN_AREA = Math.pow(2,-18);
 let svg_size = 5;
 
 const UNION_ID        = "UNION";
@@ -602,7 +603,7 @@ function FuseLayerColours(layers)
 	).filter(layer => layer.poly.flat(1).length > 0);
 }
 
-function SeparateLayerIslands(layers)
+function SeparateLayerPolys(layers)
 {
 	let clipper = new ClipperLib.Clipper();
 
@@ -635,6 +636,16 @@ function SeparateLayerIslands(layers)
 	return new_layers;
 }
 
+function CullSmallLayers(layers)
+{
+	return layers.filter(
+		layer => layer.poly.reduce(
+			(prev,path) => prev + ClipperLib.Clipper.Area(path),
+			0
+		) >= WORKING_SCALE * WORKING_SCALE * MIN_AREA
+	);
+}
+
 function ConnectLayers(layers)
 {
 	let connections = [
@@ -650,8 +661,12 @@ function ConnectLayers(layers)
 						if (v2.X < v1.X || (v2.X == v1.X && v2.Y < v1.Y))
 							[v1,v2] = [v2,v1];
 						
-						let tangent_angle = Math.atan2(v2.Y - v1.Y, v2.X - v1.X) % Math.PI;
-						let tangent = [Math.cos(tangent_angle), Math.sin(tangent_angle)];
+						let tangent_angle = Math.atan2(v2.Y - v1.Y, v2.X - v1.X);
+						tangent_angle = Math.round(tangent_angle * ADJACENCY_ANGLE_STEPS / Math.PI) % ADJACENCY_ANGLE_STEPS;
+						let tangent = [
+							Math.cos(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI),
+							Math.sin(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI)
+						];
 
 						let minTangent = DotProduct(tangent,[v1.X,v1.Y]);
 						let maxTangent = DotProduct(tangent,[v2.X,v2.Y]);
@@ -662,8 +677,8 @@ function ConnectLayers(layers)
 						let normal = [-tangent[1],tangent[0]];
 						let offset = DotProduct(normal, [ v1.X + v2.X, v1.Y + v2.Y ]) * .5;
 
-						let plane = `${Math.round(tangent_angle * ADJACENCY_ANGLE_STEPS / Math.PI)},${Math.round(offset / (ADJACENCY_MAX_DISTANCE * WORKING_SCALE))}`;
-						
+						let plane = `${tangent_angle},${Math.round(offset / (ADJACENCY_MAX_DISTANCE * WORKING_SCALE))}`;
+
 						if (!p3.has(plane))
 							p3.set(plane,[]);
 						
@@ -708,6 +723,8 @@ function ConnectLayers(layers)
 		},
 		{}
 	);
+	
+	// TODO: Annotate distances between all regions
 	
 	layers.forEach(
 		(layer, layerIndex) =>
@@ -797,7 +814,8 @@ SETTINGS.addEventListener("submit",
 		let layers = GraphicsToLayers(graphics);
 		layers = ClipOccludedLayers(layers);
 		layers = FuseLayerColours(layers);
-		layers = SeparateLayerIslands(layers);
+		layers = SeparateLayerPolys(layers);
+		layers = CullSmallLayers(layers);
 		layers = ConnectLayers(layers);
 		// TODO: 4-colour graph as basis for rsdf
 		// TODO: Render an SDF image for each colour
