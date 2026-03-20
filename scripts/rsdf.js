@@ -1,7 +1,9 @@
-const POLY_STEP = 1.0 / 256.0;
+const POLY_STEP = 1.0 / 2048.0;
 const CLEANUP_DELTA = POLY_STEP / 16.0;
 const WORKING_SCALE = 65536.0;
-const DEBUG_LINE_THICKNESS = 1.0 / 512.0;
+const DEBUG_LINE_THICKNESS = 1.0 / 2048.0;
+const ADJACENCY_MAX_DISTANCE = POLY_STEP / 4.0;
+const ADJACENCY_ANGLE_STEPS = 256.0;
 let svg_size = 5;
 
 const UNION_ID        = "UNION";
@@ -70,6 +72,11 @@ function SVGMatMulVec(m,v)
 		v[0] * m.a + v[1] * m.c + m.e,
 		v[0] * m.b + v[1] * m.d + m.f,
 	];
+}
+
+function DotProduct(a,b)
+{
+	return a[0] * b[0] + a[1] * b[1];
 }
 
 function PointsEqual(a,b)
@@ -630,11 +637,6 @@ function SeparateLayerIslands(layers)
 
 function ConnectLayers(layers)
 {
-	let minX = Number.POSITIVE_INFINITY;
-	let maxX = Number.NEGATIVE_INFINITY;
-	let minY = Number.POSITIVE_INFINITY;
-	let maxY = Number.NEGATIVE_INFINITY;
-
 	let connections = [
 		...layers.reduce(
 			(p1,layer,layerIndex) => layer.poly.reduce(
@@ -644,20 +646,33 @@ function ConnectLayers(layers)
 						let v1 = {X:v.X,Y:v.Y};
 						let v2 = path[(i + 1) % path.length];
 						v2 = {X:v2.X,Y:v2.Y};
-						if (v2.X < v1.X) [v1,v2] = [v2,v1];
+
+						if (v2.X < v1.X || (v2.X == v1.X && v2.Y < v1.Y))
+							[v1,v2] = [v2,v1];
 						
-						let edge = `${v1.X},${v1.Y},${v2.X},${v2.Y}`;
+						let tangent_angle = Math.atan2(v2.Y - v1.Y, v2.X - v1.X) % Math.PI;
+						let tangent = [Math.cos(tangent_angle), Math.sin(tangent_angle)];
+
+						let minTangent = DotProduct(tangent,[v1.X,v1.Y]);
+						let maxTangent = DotProduct(tangent,[v2.X,v2.Y]);
+
+						if (maxTangent < minTangent)
+							[minTangent, maxTangent] = [maxTangent,minTangent];
+
+						let normal = [-tangent[1],tangent[0]];
+						let offset = DotProduct(normal, [ v1.X + v2.X, v1.Y + v2.Y ]) * .5;
+
+						let plane = `${Math.round(tangent_angle * ADJACENCY_ANGLE_STEPS / Math.PI)},${Math.round(offset / (ADJACENCY_MAX_DISTANCE * WORKING_SCALE))}`;
 						
-						if (v2.Y < v1.Y) [v1.Y,v2.Y] = [v2.Y,v1.Y];
-						if (v1.X < minX) minX = v1.X;
-						if (v2.X > maxX) maxX = v2.X;
-						if (v1.Y < minY) minY = v1.Y;
-						if (v2.Y > maxY) maxY = v2.Y;
+						if (!p3.has(plane))
+							p3.set(plane,[]);
 						
-						if (!p3.has(edge))
-							p3.set(edge,[]);
-						
-						p3.get(edge).push(layerIndex);
+						p3.get(plane).push(
+							{
+								min: minTangent,
+								max: maxTangent,
+								index:layerIndex
+							});
 						return p3;
 					},
 					p2
@@ -672,13 +687,22 @@ function ConnectLayers(layers)
 	)
 	.reduce((nodeList,[k,v]) => 
 		{
-			if (!(v[0] in nodeList))
-				nodeList[v[0]] = new Set();
-			if (!(v[1] in nodeList))
-				nodeList[v[1]] = new Set();
-			
-			nodeList[v[0]].add(v[1]);
-			nodeList[v[1]].add(v[0]);
+			for (let i = 0; i < v.length - 1; i++)
+			{
+				for (let j = i + 1; j < v.length; j++)
+				{
+					if (v[i].max < v[j].min || v[i].min > v[j].max)
+						continue;
+
+					if (!(v[i].index in nodeList))
+						nodeList[v[i].index] = new Set();
+					if (!(v[j].index in nodeList))
+						nodeList[v[j].index] = new Set();
+					
+					nodeList[v[i].index].add(v[j].index);
+					nodeList[v[j].index].add(v[i].index);
+				}
+			}
 			
 			return nodeList;
 		},
