@@ -6,6 +6,11 @@ const ADJACENCY_MAX_DISTANCE = POLY_STEP * Math.pow(2,-1);
 const ADJACENCY_ANGLE_STEPS = Math.pow(2,8);
 const MIN_AREA = Math.pow(2,-18);
 let svg_size = 5;
+const SDF_SIZE = Math.pow(2,8); // Size of rendered sdf
+const SDF_PERPENDICULAR = false; // Whether distance should be perpendicular rather than euclidean
+const SDF_INVERT = false; // Whether to map distances from [0,1] to [1,0]
+const SDF_INNER_RANGE = 1; // Pixels relative to size of image
+const SDF_OUTER_RANGE = 1; // Pixels relative to size of image
 
 const UNION_ID        = "UNION";
 const INTERSECTION_ID = "INTERSECTION";
@@ -32,6 +37,13 @@ const VISUALISATION_COLOURS = new Map([
 	[COLOUR2_COLOUR, "oklch(0.719 0.1635 149.72)"],
 	[COLOUR3_COLOUR, "oklch(0.719 0.1635 239.72)"],
 	[COLOUR4_COLOUR, "oklch(0.719 0.1635 329.72)"]
+]);
+
+const CHANNEL_MAPPING = new Map([
+	[COLOUR1_COLOUR,0],
+	[COLOUR2_COLOUR,1],
+	[COLOUR3_COLOUR,2],
+	[COLOUR4_COLOUR,3],
 ]);
 
 const ID_MAP = {
@@ -927,17 +939,304 @@ function GraphColourLayers(layers)
 	return layers;
 }
 
+function GetSignedDistanceToEdge(
+	vert1,
+	vert2,
+	point,
+	layerIndex,
+	pathIndex,
+	edgeIndex
+	)
+{
+	vert1 = [vert1.X,vert1.Y];
+	vert2 = [vert2.X,vert2.Y];
+	point = [point.X,point.Y];
+
+	if (PointsEqual(vert1,vert2))
+	{
+		let dist = PointDistance(vert1, point);
+		return {
+			euclidean: dist,
+			perpendicular: dist,
+			layer: layerIndex,
+			path: pathIndex,
+			edge: edgeIndex
+		};
+	}
+
+	vert2[0] -= vert1[0];
+	vert2[1] -= vert1[1];
+	point[0] -= vert1[0];
+	point[1] -= vert1[1];
+
+	let edgeLen = Math.sqrt(vert2[0] * vert2[0] + vert2[1] * vert2[1]);
+
+	// TODO: Precalculate tangent/normal/length onto vertices
+	let tangent = [
+		vert2[0] / edgeLen,
+		vert2[1] / edgeLen
+	];
+	let normal = [
+		tangent[1],
+		-tangent[0]
+	];
+
+	let t = DotProduct(point,tangent)
+	t = Math.max(0,Math.min(t, edgeLen));
+
+	let closest = [
+		tangent[0] * t,
+		tangent[1] * t
+	];
+
+	let pDist = DotProduct(point, normal);
+
+	// TODO: Consider surrounding edges for better estimation for sign
+	let sign = pDist < 0 ? -1 : 1; // Can't use Math.sign because it returns 0
+
+	return {
+		euclidean: PointDistance(point, closest) * sign,
+		perpendicular: pDist,
+		layer: layerIndex,
+		path: pathIndex,
+		edge: edgeIndex
+	};
+}
+
+function GetClosestDist(dista, distb)
+{
+	if (Math.abs(dista.euclidean) < Math.abs(distb.euclidean))
+		return dista;
+
+	if (Math.abs(dista.euclidean) > Math.abs(distb.euclidean))
+		return distb;
+
+	// Possibly incorrect
+	if (dista.perpendicular > distb.perpendicular)
+		return dista
+	
+	return distb;
+}
+
+// Signed distance to path as [{X:...,Y:...}...]
+function GetSignedDistanceToPath(
+	path,
+	point,
+	layerIndex,
+	pathIndex,
+	prevDist = {
+		euclidean: Number.MAX_VALUE,
+		perpendicular: Number.MAX_VALUE,
+		layer: undefined,
+		path: undefined,
+		edge: undefined
+	})
+{
+	return path.reduce((minDist, vert, vi) =>
+		GetClosestDist(
+			GetSignedDistanceToEdge(
+				vert,
+				path[(vi + 1) % path.length],
+				point,
+				layerIndex,
+				pathIndex,
+				vi
+			),
+			minDist
+		),
+		prevDist
+	);
+}
+
+// Signed distance to polygon as [[{X:...,Y:...}...]...], and point as {X:...,Y:...}
+function GetSignedDistanceToPolygon(
+	polygon, 
+	point, 
+	layerIndex, 
+	prevDist = {
+		euclidean: Number.MAX_VALUE,
+		perpendicular: Number.MAX_VALUE,
+		layer: undefined,
+		path: undefined,
+		edge: undefined
+	})
+{
+	return polygon.reduce((minDist, path, pi) =>
+		GetSignedDistanceToPath(
+			path,
+			point,
+			layerIndex,
+			pi,
+			minDist
+		),
+		prevDist
+	);
+}
+
+// Signed distance to layers as [{poly:[[{X:...,Y:...}...]...]...}...]
+function GetSignedDistanceToLayers(
+	layers,
+	point,
+	prevDist = {
+		euclidean: Number.MAX_VALUE,
+		perpendicular: Number.MAX_VALUE,
+		layer: undefined,
+		path: undefined,
+		edge: undefined
+	}
+	)
+{
+	return layers.reduce((minDist, layer, li) =>
+		GetSignedDistanceToPolygon(
+			layer.poly,
+			point,
+			li,
+			minDist
+		),
+		prevDist
+	);
+}
+
+// Samples an SDF field for layers assumed to be the same colour
+function LayersToSDF(layers, width, height, viewbox)
+{
+	// TODO: Add acceleration structure to discard layers and/or paths
+	let sdf = [];
+	let sample = {X:0,Y:0};
+	for (let row = 0; row < height; row++)
+	{
+		sample.Y = ((row + 0.5) / height * viewbox.h + viewbox.y) / svg_size * WORKING_SCALE;
+
+		let rowDat = [];
+		for (let col = 0; col < width; col++)
+		{
+			sample.X = ((col + 0.5) / width * viewbox.w + viewbox.x) / svg_size * WORKING_SCALE;
+
+			rowDat.push(
+				GetSignedDistanceToLayers(layers, sample)
+			);
+		}
+		sdf.push(rowDat);
+	}
+	return sdf;
+}
+
+// Splits layers into differently coloured regions,
+// then renders an SDF for each one (up to four).
+// Returns a Map from Colour constants to [[{euclidean:...,perpendicular:...,layer:...,path:...,edge:...}...]...]
+function ColouredLayersToSDFs(layers, width, height, viewbox)
+{
+	if (layers.length == 0)
+		return new Map();
+
+	// Separate layers into groups of single colours
+	let colouredLayers = layers.reduce(
+		(prev, layer, li) =>
+		{
+			// Used to map back to indexes in the original layers list,
+			// after sdfs are constructed with subsets of the layers with
+			// different indexes.
+			layer.original_index = li;
+
+			if(!prev.has(layer.graph_colour))
+				prev.set(layer.graph_colour,[]);
+			prev.get(layer.graph_colour).push(layer);
+
+			return prev;
+		},
+		new Map()
+	);
+
+	// Create a different SDF for each colour
+	return new Map(
+		[...colouredLayers.entries()]
+		.map(([colour,subLayers]) => [
+			colour,
+			LayersToSDF(subLayers, width, height, viewbox)
+			.map(row => row
+				.map(sample => {
+					// Set layer back to correct index
+					sample.layer = sample.layer ? subLayers[sample.layer].original_index : undefined;
+					return sample;
+				})
+			)
+		])
+	);
+}
+
+function SDFsToImage(
+		sdfs,
+		width,
+		height,
+		min,
+		max,
+		perpendicular,
+		inverted,
+		false_colour
+	)
+{
+	let data = [];
+
+	for (let i = 0; i < width * height * 4; i++)
+		data.push(255);
+
+	[...sdfs.entries()].forEach(([colour,rows]) => {
+		if (colour == UNKNOWN_COLOUR)
+			return;
+
+		let index = CHANNEL_MAPPING.get(colour);
+
+		rows
+		.forEach(row => row
+			.forEach(sample => {
+				let dist = perpendicular
+					? sample.perpendicular
+					: sample.euclidean;
+
+				dist = (dist - min) / (max - min);
+				dist = dist > 0 ? (dist < 1 ? dist : 1) : 0;
+
+				data[index] = Math.round(dist * 255);
+				index += 4;
+			})
+		)
+	});
+
+	if (inverted)
+		data = data.map(v => 255 - v);
+
+	if (false_colour)
+	{
+		for (let i = 0; i < sdf_width * sdf_height * 4; i += 4)
+		{
+			let r = data[i+0];
+			let g = data[i+1];
+			let b = data[i+2];
+			let a = data[i+3];
+			data[i+0] = r * 2 / 4 + g * 2 / 4;
+			data[i+1] = g * 2 / 4 + b * 2 / 4;
+			data[i+2] = b * 1 / 4 + a * 3 / 4;
+			data[i+3] = 255;
+		}
+	}
+
+	return data;
+}
+
 const UPLOAD_INPUT = document.getElementById("upload_input");
 const SVG_NAME = document.getElementById("input_preview_name");
 const SVG_PREVIEW = document.getElementById("input_preview_svg");
 const BUTTON_CONVERT = document.getElementById("button-convert");
 const SETTINGS = document.getElementById("rsdf-settings");
+const OUTPUT_CANVAS = document.getElementById("output-canvas");
 
 const NO_FILE_TEXT = "No file selected (0 bytes)";
 SVG_NAME.textContent = NO_FILE_TEXT;
 
 var svg_input = null;
 var svg_overlay_group = null;
+		
+const CANVAS_CTX = OUTPUT_CANVAS.getContext('2d');
 
 UPLOAD_INPUT.addEventListener("change",
 	e =>
@@ -994,8 +1293,26 @@ SETTINGS.addEventListener("submit",
 			throw new Error("SVG has no viewBox!");
 		
 		viewbox = viewbox.split(/\s+|,/);
+
+		viewbox = {
+			x: viewbox[0],
+			y: viewbox[1],
+			w: viewbox[2],
+			h: viewbox[3]
+		};
 		
-		svg_size = Math.max(viewbox[2],viewbox[3]);
+		svg_size = Math.max(viewbox.w,viewbox.h);
+
+		let sdf_width = SDF_SIZE;
+		let sdf_height = SDF_SIZE;
+
+		if (viewbox.w > viewbox.h)
+			sdf_height = Math.round(SDF_SIZE * viewbox.h / viewbox.w);
+		else
+			sdf_width = Math.round(SDF_SIZE * viewbox.w / viewbox.h);
+
+		let sdf_min = -SDF_INNER_RANGE * WORKING_SCALE / SDF_SIZE;
+		let sdf_max = SDF_OUTER_RANGE * WORKING_SCALE / SDF_SIZE;
 		
 		let graphics = SVGExtractGraphics(svg_input);
 		let layers = GraphicsToLayers(graphics);
@@ -1005,8 +1322,6 @@ SETTINGS.addEventListener("submit",
 		layers = CullSmallLayers(layers);
 		layers = ConnectLayers(layers);
 		layers = GraphColourLayers(layers);
-		// TODO: Render an SDF image for each colour
-		// TODO: Composite SDF images into channel packed RSDF
 		
 		svg_overlay_group = CreateSVGElement("g","overlay")
 		svg_input.appendChild(svg_overlay_group);
@@ -1083,6 +1398,30 @@ SETTINGS.addEventListener("submit",
 				
 				svg_overlay_group.appendChild(circle);
 			}
-		)
+		);
+
+		let sdfs = ColouredLayersToSDFs(layers, sdf_width, sdf_height, viewbox);
+
+		let sdf_img = SDFsToImage(
+			sdfs,
+			sdf_width,
+			sdf_height,
+			sdf_min,
+			sdf_max,
+			SDF_PERPENDICULAR,
+			SDF_INVERT,
+			true
+		);
+
+		OUTPUT_CANVAS.width = sdf_width;
+		OUTPUT_CANVAS.height = sdf_height;
+
+		const img_data = CANVAS_CTX.getImageData(0,0,sdf_width,sdf_height);
+		const data = img_data.data;
+		sdf_img.forEach((v,i) => data[i] = v);
+		CANVAS_CTX.putImageData(img_data,0,0);
+
+		// TODO: Render corresponding colour texture for the RSDF
+		// TODO: Create combined preview using RSDF sampling in a shader
 	}
 );
