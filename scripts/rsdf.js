@@ -9,6 +9,7 @@ let svg_size = 5;
 const SDF_SIZE = Math.pow(2,8); // Size of rendered sdf
 const SDF_PERPENDICULAR = false; // Whether distance should be perpendicular rather than euclidean
 const SDF_INVERT = false; // Whether to map distances from [0,1] to [1,0]
+const SDF_FALSECOLOUR = false; // Whether the SDF should render with false colour (fully opaque within 3 channels)
 const SDF_INNER_RANGE = 1; // Pixels relative to size of image
 const SDF_OUTER_RANGE = 1; // Pixels relative to size of image
 
@@ -166,8 +167,9 @@ function PointsToCPoly(points)
 
 function CPolyToPoints(cpoly)
 {
-	ClipperLib.JS.ScaleDownPaths(cpoly, WORKING_SCALE / svg_size);
-	return cpoly.map(p => p.map(v => [v.X, v.Y]));
+	let copied_poly = JSON.parse(JSON.stringify(cpoly));
+	ClipperLib.JS.ScaleDownPaths(copied_poly, WORKING_SCALE / svg_size);
+	return copied_poly.map(p => p.map(v => [v.X, v.Y]));
 }
 
 // Converts Paths to an SVG path string
@@ -824,13 +826,10 @@ function GraphColourLayers(layers)
 	});
 	layers
 	.forEach(layer => {
-		layer.neighbour_colours = new Map([
-			[COLOUR1_COLOUR,0],
-			[COLOUR2_COLOUR,0],
-			[COLOUR3_COLOUR,0],
-			[COLOUR4_COLOUR,0],
-			[UNKNOWN_COLOUR,0]
-		]);
+		layer.neighbour_colours = new Map(
+			[...GRAPH_COLOURS]
+				.map(colour => [colour,0])
+		);
 		layer.connections.forEach(connection =>
 			layer.neighbour_colours.set(
 				connection.layer.graph_colour, 
@@ -981,13 +980,19 @@ function GetSignedDistanceToEdge(
 		-tangent[0]
 	];
 
-	let t = DotProduct(point,tangent)
-	t = Math.max(0,Math.min(t, edgeLen));
+	let t = DotProduct(point, tangent) / edgeLen;
 
-	let closest = [
-		tangent[0] * t,
-		tangent[1] * t
-	];
+	let closest;
+	
+	if (t <= 0)
+		closest = [0,0];
+	else if (t >= 1)
+		closest = vert2;
+	else
+		closest = [
+			vert2[0] * t,
+			vert2[1] * t
+		];
 
 	let pDist = DotProduct(point, normal);
 
@@ -1105,12 +1110,12 @@ function LayersToSDF(layers, width, height, viewbox)
 	let sample = {X:0,Y:0};
 	for (let row = 0; row < height; row++)
 	{
-		sample.Y = ((row + 0.5) / height * viewbox.h + viewbox.y) / svg_size * WORKING_SCALE;
+		sample.Y = ((row + 0.5) / height * viewbox.h + viewbox.y) * WORKING_SCALE / svg_size;
 
 		let rowDat = [];
 		for (let col = 0; col < width; col++)
 		{
-			sample.X = ((col + 0.5) / width * viewbox.w + viewbox.x) / svg_size * WORKING_SCALE;
+			sample.X = ((col + 0.5) / width * viewbox.w + viewbox.x) * WORKING_SCALE / svg_size;
 
 			rowDat.push(
 				GetSignedDistanceToLayers(layers, sample)
@@ -1207,7 +1212,7 @@ function SDFsToImage(
 
 	if (false_colour)
 	{
-		for (let i = 0; i < sdf_width * sdf_height * 4; i += 4)
+		for (let i = 0; i < width * height * 4; i += 4)
 		{
 			let r = data[i+0];
 			let g = data[i+1];
@@ -1286,19 +1291,22 @@ SETTINGS.addEventListener("submit",
 			
 		// TODO?: Support high-resolution bitmaps (completely different pipeline, but common use-case)
 		if (!svg_input) return;
-		
-		let viewbox = svg_input.getAttribute("viewBox");
-		
-		if (!viewbox)
+				
+		if (!svg_input.hasAttribute("viewBox"))
 			throw new Error("SVG has no viewBox!");
 		
-		viewbox = viewbox.split(/\s+|,/);
+		let viewbox = svg_input
+			.getAttribute("viewBox")
+			.split(/\s+|,/);
+
+		if (viewbox.length != 4)
+			throw new Error(`Expected 4 arguments for SVG viewbox, got ${viewbox.length}!`)
 
 		viewbox = {
-			x: viewbox[0],
-			y: viewbox[1],
-			w: viewbox[2],
-			h: viewbox[3]
+			x: Number(viewbox[0]),
+			y: Number(viewbox[1]),
+			w: Number(viewbox[2]),
+			h: Number(viewbox[3])
 		};
 		
 		svg_size = Math.max(viewbox.w,viewbox.h);
@@ -1410,7 +1418,7 @@ SETTINGS.addEventListener("submit",
 			sdf_max,
 			SDF_PERPENDICULAR,
 			SDF_INVERT,
-			true
+			SDF_FALSECOLOUR
 		);
 
 		OUTPUT_CANVAS.width = sdf_width;
