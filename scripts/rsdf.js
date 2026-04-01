@@ -9,6 +9,7 @@ let svg_size = 5;
 const SDF_SIZE = Math.pow(2,8); // Size of rendered sdf
 const SDF_PERPENDICULAR = false; // Whether distance should be perpendicular rather than euclidean
 const SDF_INVERT = false; // Whether to map distances from [0,1] to [1,0]
+const SDF_SATURATE = true; // Whether to set distances to exclusively the minima. Good for debugging, finding doubles, making colour maps by hand...
 const SDF_FALSECOLOUR = false; // Whether the SDF should render with false colour (fully opaque within 3 channels)
 const SDF_INNER_RANGE = 1; // Pixels relative to size of image
 const SDF_OUTER_RANGE = 1; // Pixels relative to size of image
@@ -17,6 +18,8 @@ const UNION_ID        = "UNION";
 const INTERSECTION_ID = "INTERSECTION";
 const DIFFERENCE_ID   = "DIFFERENCE";
 const XOR_ID          = "XOR";
+const SDF_COLOUR_DEPTH = 8;
+const SDF_MAX_VALUE = Math.pow(2, SDF_COLOUR_DEPTH) - 1;
 
 const DIST_EUCLIDEAN = "de";
 const DIST_PERPENDICULAR = "dp";
@@ -1253,15 +1256,13 @@ function SDFsToImage(
 		height,
 		min,
 		max,
-		perpendicular,
-		inverted,
-		false_colour
+		perpendicular
 	)
 {
 	let data = [];
 
 	for (let i = 0; i < width * height * 4; i++)
-		data.push(255);
+		data.push(SDF_MAX_VALUE);
 
 	[...sdfs.entries()].forEach(([colour,rows]) => {
 		if (colour == UNKNOWN_COLOUR)
@@ -1279,106 +1280,133 @@ function SDFsToImage(
 				dist = (dist - min) / (max - min);
 				dist = dist > 0 ? (dist < 1 ? dist : 1) : 0;
 
-				data[index] = Math.round(dist * 255);
+				data[index] = Math.round(dist * SDF_MAX_VALUE);
 				index += 4;
 			})
 		)
 	});
 
-	if (inverted)
-		data = data.map(v => 255 - v);
-
-	if (false_colour)
-	{
-		for (let i = 0; i < width * height * 4; i += 4)
-		{
-			let r = data[i+0];
-			let g = data[i+1];
-			let b = data[i+2];
-			let a = data[i+3];
-			data[i+0] = r * 2 / 4 + g * 2 / 4;
-			data[i+1] = g * 2 / 4 + b * 2 / 4;
-			data[i+2] = b * 1 / 4 + a * 3 / 4;
-			data[i+3] = 255;
-		}
-	}
-
 	return data;
 }
 
-const UPLOAD_INPUT = document.getElementById("upload_input");
-const SVG_NAME = document.getElementById("input_preview_name");
-const SVG_PREVIEW = document.getElementById("input_preview_svg");
+function SaturateSDFImage(data)
+{
+	let data_out = []
+
+	for (let i = 0; i+3 < data.length; i += 4)
+	{
+		let r = data[i+0];
+		let g = data[i+1];
+		let b = data[i+2];
+		let a = data[i+3];
+		let min = Math.min(r,g,b,a);
+		data_out.push(r == min ? 0 : SDF_MAX_VALUE);
+		data_out.push(g == min ? 0 : SDF_MAX_VALUE);
+		data_out.push(b == min ? 0 : SDF_MAX_VALUE);
+		data_out.push(a == min ? 0 : SDF_MAX_VALUE);
+	}
+
+	return data_out;
+}
+
+function InvertSDFImage(data)
+{
+	return data.map(v => SDF_MAX_VALUE - v);
+}
+
+function FalseColourSDFImage(data)
+{
+	let data_out = []
+
+	for (let i = 0; i+3 < data.length; i += 4)
+	{
+		let r = data[i+0];
+		let g = data[i+1];
+		let b = data[i+2];
+		let a = data[i+3];
+		data_out.push(r * 2 / 4 + g * 2 / 4);
+		data_out.push(g * 2 / 4 + b * 2 / 4);
+		data_out.push(b * 1 / 4 + a * 3 / 4);
+		data_out.push(SDF_MAX_VALUE);
+	}
+
+	return data_out;
+}
+
+const UPLOAD_INPUT = document.getElementById("upload-input");
+const SVG_NAME = document.getElementById("input-preview-name");
+const SVG_PREVIEW = document.getElementById("input-preview-svg");
 const BUTTON_CONVERT = document.getElementById("button-convert");
+const BUTTON_SAVE = document.getElementById("button-save");
 const SETTINGS = document.getElementById("rsdf-settings");
 const OUTPUT_CANVAS = document.getElementById("output-canvas");
+const FALSECOLOUR_CANVAS = document.getElementById("falsecolour-canvas");
+const SATURATED_CANVAS = document.getElementById("saturated-canvas");
 
 const NO_FILE_TEXT = "No file selected (0 bytes)";
 SVG_NAME.textContent = NO_FILE_TEXT;
 
-var svg_input = null;
-var svg_overlay_group = null;
-		
-const CANVAS_CTX = OUTPUT_CANVAS.getContext('2d');
+let svg_input = null;
+let svg_overlay_group = null;
+let layers = [];
+let viewbox = undefined;
+let filename = "";
 
-UPLOAD_INPUT.addEventListener("change",
-	e =>
+let sdf_width = 0;
+let sdf_height = 0;
+let sdf_img = [];
+let falsecolour_img = [];
+let saturated_img = [];
+
+const CANVAS_CTX = OUTPUT_CANVAS.getContext("2d");
+const FALSECOLOUR_CTX = FALSECOLOUR_CANVAS.getContext("2d");
+const SATURATED_CTX = SATURATED_CANVAS.getContext("2d");
+
+UPLOAD_INPUT.addEventListener("change", e => {
+	svg_overlay_group = null;
+
+	svg_input?.remove();
+	svg_input = null;
+
+	OUTPUT_CANVAS.style.display = "none";
+	SATURATED_CANVAS.style.display = "none";
+	FALSECOLOUR_CANVAS.style.display = "none;"
+	layers = undefined;
+
+	let file = e.target.files[0];
+	filename = "";
+
+	if (!file)
 	{
-		svg_overlay_group = null;
-
-		svg_input?.remove();
-		svg_input = null;
-
-		let file = e.target.files[0];
-
-		if (!file)
-		{
-			SVG_NAME.textContent = NO_FILE_TEXT;
-			return;
-		}
-
-		const reader = new FileReader();
-
-		reader.onload = () => {
-			SVG_NAME.textContent = `"${file.name}" (${file.size} bytes)`
-			SVG_PREVIEW.innerHTML = reader.result;
-			svg_input = SVG_PREVIEW.querySelector("svg");
-			// Remove svg size so it fits to the page
-			// The viewbox will still take care of units & aspect
-			svg_input.removeAttribute("width");
-			svg_input.removeAttribute("height");
-		};
-
-		reader.onerror = () => {
-			showMessage("Error reading the file. Please try again.", "error");
-			SVG_NAME.textContent = NO_FILE_TEXT;
-			SVG_PREVIEW.innerHTML = "";
-		};
-
-		reader.readAsText(file);
+		SVG_NAME.textContent = NO_FILE_TEXT;
+		return;
 	}
-);
 
-SETTINGS.addEventListener("submit",
-	e =>
-	{
-		e.preventDefault();
+	const reader = new FileReader();
 
-		svg_overlay_group?.remove();
-		svg_overlay_group = null;
-			
-		// TODO?: Support high-resolution bitmaps (completely different pipeline, but common use-case)
-		if (!svg_input) return;
-				
+	reader.onload = () => {
+		SVG_NAME.textContent = `"${file.name}" (${file.size} bytes)`
+		SVG_PREVIEW.innerHTML = reader.result;
+		svg_input = SVG_PREVIEW.querySelector("svg");
+		// Remove svg size so it fits to the page
+		// The viewbox will still take care of units & aspect
+		svg_input.removeAttribute("width");
+		svg_input.removeAttribute("height");
+
 		if (!svg_input.hasAttribute("viewBox"))
 			throw new Error("SVG has no viewBox!");
 		
-		let viewbox = svg_input
+		viewbox = svg_input
 			.getAttribute("viewBox")
 			.split(/\s+|,/);
 
 		if (viewbox.length != 4)
-			throw new Error(`Expected 4 arguments for SVG viewbox, got ${viewbox.length}!`)
+			throw new Error(`Expected 4 arguments for SVG viewbox, got ${viewbox.length}!`);
+
+		filename = file.name
+			.split('.')
+			.slice(0,-1) // Exclude file extension
+			.join(".");
 
 		viewbox = {
 			x: Number(viewbox[0]),
@@ -1388,127 +1416,269 @@ SETTINGS.addEventListener("submit",
 		};
 		
 		svg_size = Math.max(viewbox.w,viewbox.h);
+	};
 
-		let sdf_width = SDF_SIZE;
-		let sdf_height = SDF_SIZE;
+	reader.onerror = () => {
+		showMessage("Error reading the file. Please try again.", "error");
+		SVG_NAME.textContent = NO_FILE_TEXT;
+		SVG_PREVIEW.innerHTML = "";
+	};
 
-		if (viewbox.w > viewbox.h)
-			sdf_height = Math.round(SDF_SIZE * viewbox.h / viewbox.w);
-		else
-			sdf_width = Math.round(SDF_SIZE * viewbox.w / viewbox.h);
+	reader.readAsText(file);
+});
 
-		let sdf_min = -SDF_INNER_RANGE * WORKING_SCALE / SDF_SIZE;
-		let sdf_max = SDF_OUTER_RANGE * WORKING_SCALE / SDF_SIZE;
+BUTTON_CONVERT.addEventListener("click", e => {
+	svg_overlay_group?.remove();
+	svg_overlay_group = null;
 		
+	// TODO?: Support high-resolution bitmaps (completely different pipeline, but common use-case)
+	if (!svg_input) return;
+	
+	if (!layers)
+	{
 		let graphics = SVGExtractGraphics(svg_input);
-		let layers = GraphicsToLayers(graphics);
+		layers = GraphicsToLayers(graphics);
+		// TODO: Add transparency step, intersecting lower layers and setting fills to stacks of blends
 		layers = ClipOccludedLayers(layers);
 		layers = FuseLayerColours(layers);
 		layers = SeparateLayerPolys(layers);
 		layers = CullSmallLayers(layers);
 		layers = ConnectLayers(layers);
-		layers = GraphColourLayers(layers);
-		
-		svg_overlay_group = CreateSVGElement("g","overlay")
-		svg_input.appendChild(svg_overlay_group);
+	}
+	else
+	{
+		layers.forEach(layer => layer.graph_colour = UNKNOWN_COLOUR);
+	}
 
-		layers.forEach(
-			layer => {
-				layer.points = CPolyToPoints(layer.poly);
-				layer.center = GetPathsCenter(layer.points);
-			}
-		);
-		
-		layers.forEach(
-			(layer, i) => 
-			{
-				let fill = VISUALISATION_COLOURS.get(layer.graph_colour);
-				//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
-				//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
-				AddPaths(
-					svg_overlay_group,
-					PathsToString(layer.points),
-					fill,
-					"#777",
-					svg_size * DEBUG_LINE_THICKNESS
-				);
-			}
-		);
-		
-		layers.forEach(
-			(layer, i) =>
-			{
-				layer.connections.forEach(
-					connection => {
-						if (connection.index < i)
-							return;
-						
-						let line = CreateSVGElement("line");
-				
-						SetAttributes(
-							line,
-							{
-								stroke: "#F00",
-								"stroke-width": svg_size * DEBUG_LINE_THICKNESS,
-								"stroke-linejoin": "round",
-								x1: layer.center.X,
-								y1: layer.center.Y,
-								x2: connection.layer.center.X,
-								y2: connection.layer.center.Y,
-								r: 5
-							}
-						);
-						
-						svg_overlay_group.appendChild(line);
-					}
-				);
-				
-				let fill = VISUALISATION_COLOURS.get(layer.graph_colour);
-				//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
-				//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
-				
-				let circle = CreateSVGElement("circle");
-				
-				SetAttributes(
-					circle,
-					{
-						fill: fill,
-						stroke: "#F00",
-						"stroke-width": svg_size * DEBUG_LINE_THICKNESS,
-						"stroke-linejoin": "round",
-						cx: layer.center.X,
-						cy: layer.center.Y,
-						r: svg_size * DEBUG_LINE_THICKNESS * 4
-					}
-				);
-				
-				svg_overlay_group.appendChild(circle);
-			}
-		);
+	layers = GraphColourLayers(layers);
+	
+	svg_overlay_group = CreateSVGElement("g","overlay")
+	svg_input.appendChild(svg_overlay_group);
 
-		LayersCalculateVectors(layers);
-		let sdfs = ColouredLayersToSDFs(layers, sdf_width, sdf_height, viewbox);
+	layers.forEach(
+		layer => {
+			layer.points = CPolyToPoints(layer.poly);
+			layer.center = GetPathsCenter(layer.points);
+		}
+	);
+	
+	layers.forEach(
+		(layer, i) => 
+		{
+			let fill = VISUALISATION_COLOURS.get(layer.graph_colour);
+			//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
+			//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
+			AddPaths(
+				svg_overlay_group,
+				PathsToString(layer.points),
+				fill,
+				"#777",
+				svg_size * DEBUG_LINE_THICKNESS
+			);
+		}
+	);
+	
+	layers.forEach(
+		(layer, i) =>
+		{
+			layer.connections.forEach(
+				connection => {
+					if (connection.index < i)
+						return;
+					
+					let line = CreateSVGElement("line");
+			
+					SetAttributes(
+						line,
+						{
+							stroke: "#F00",
+							"stroke-width": svg_size * DEBUG_LINE_THICKNESS,
+							"stroke-linejoin": "round",
+							x1: layer.center.X,
+							y1: layer.center.Y,
+							x2: connection.layer.center.X,
+							y2: connection.layer.center.Y,
+							r: 5
+						}
+					);
+					
+					svg_overlay_group.appendChild(line);
+				}
+			);
+			
+			let fill = VISUALISATION_COLOURS.get(layer.graph_colour);
+			//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
+			//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
+			
+			let circle = CreateSVGElement("circle");
+			
+			SetAttributes(
+				circle,
+				{
+					fill: fill,
+					stroke: "#F00",
+					"stroke-width": svg_size * DEBUG_LINE_THICKNESS,
+					"stroke-linejoin": "round",
+					cx: layer.center.X,
+					cy: layer.center.Y,
+					r: svg_size * DEBUG_LINE_THICKNESS * 4
+				}
+			);
+			
+			svg_overlay_group.appendChild(circle);
+		}
+	);
 
-		let sdf_img = SDFsToImage(
-			sdfs,
+	// Interrupt function so the graph renders
+	setTimeout(RenderSDF, 0); 
+});
+
+function RenderSDF()
+{
+	sdf_width = SDF_SIZE;
+	sdf_height = SDF_SIZE;
+
+	if (viewbox.w > viewbox.h)
+		sdf_height = Math.round(SDF_SIZE * viewbox.h / viewbox.w);
+	else
+		sdf_width = Math.round(SDF_SIZE * viewbox.w / viewbox.h);
+
+	let sdf_min = -SDF_INNER_RANGE * WORKING_SCALE / SDF_SIZE;
+	let sdf_max = SDF_OUTER_RANGE * WORKING_SCALE / SDF_SIZE;
+
+	LayersCalculateVectors(layers, true);
+	let sdfs = ColouredLayersToSDFs(layers, sdf_width, sdf_height, viewbox);
+
+	sdf_img = SDFsToImage(
+		sdfs,
+		sdf_width,
+		sdf_height,
+		sdf_min,
+		sdf_max,
+		SDF_PERPENDICULAR,
+		SDF_SATURATE,
+		SDF_INVERT,
+		SDF_FALSECOLOUR
+	);
+
+	if (SDF_FALSECOLOUR)
+	{
+		FALSECOLOUR_CANVAS.style.display = "";
+		FALSECOLOUR_CANVAS.width = sdf_width;
+		FALSECOLOUR_CANVAS.height = sdf_height;
+
+		const falsecolour_img_data = FALSECOLOUR_CTX.getImageData(0,0,sdf_width,sdf_height);
+		const falsecolour_data = falsecolour_img_data.data;
+
+		falsecolour_img = [...sdf_img];
+
+		if (SDF_INVERT)
+			falsecolour_img = InvertSDFImage(falsecolour_img);
+
+		falsecolour_img = FalseColourSDFImage(falsecolour_img);
+
+		falsecolour_img.forEach((v,i) => falsecolour_data[i] = v);
+		FALSECOLOUR_CTX.putImageData(falsecolour_img_data,0,0);
+	}
+
+	if (SDF_SATURATE)
+	{
+		SATURATED_CANVAS.style.display = "";
+		SATURATED_CANVAS.width = sdf_width;
+		SATURATED_CANVAS.height = sdf_height;
+
+		const saturated_img_data = SATURATED_CTX.getImageData(0,0,sdf_width,sdf_height);
+		const saturated_data = saturated_img_data.data;
+
+		saturated_img = SaturateSDFImage([...sdf_img]);
+
+		if (SDF_INVERT)
+			saturated_img = InvertSDFImage(saturated_img);
+
+		if (SDF_FALSECOLOUR)
+			saturated_img = FalseColourSDFImage(saturated_img);
+
+		saturated_img.forEach((v,i) => saturated_data[i] = v);
+		SATURATED_CTX.putImageData(saturated_img_data,0,0);
+	}
+
+	OUTPUT_CANVAS.style.display = "";
+	OUTPUT_CANVAS.width = sdf_width;
+	OUTPUT_CANVAS.height = sdf_height;
+
+	const img_data = CANVAS_CTX.getImageData(0,0,sdf_width,sdf_height);
+	const data = img_data.data;
+
+	if (SDF_INVERT)
+		sdf_img = InvertSDFImage(sdf_img);
+
+	sdf_img.forEach((v,i) => data[i] = v);
+	CANVAS_CTX.putImageData(img_data,0,0);
+
+	// TODO: Render corresponding colour texture for the RSDF
+	// TODO: Create combined preview using RSDF sampling in a shader
+}
+
+// https://stackoverflow.com/a/58652379
+function SaveCanvas(data, width, height, name)
+{
+	let p = new png.PNG(
+		{
+			width: width,
+			height: height,
+			bitDepth: SDF_COLOUR_DEPTH
+		}
+	);
+
+	data.forEach((v,i) => p.data[i] = v);
+
+	let base64 = png.PNG.sync
+		.write(p)
+		.toBase64();
+
+	let download_link = document.createElement("a");
+	download_link.href = `data:image/png;base64,${base64}`;
+	download_link.download = `${name}.png`;
+	download_link.click();
+	download_link.remove();
+}
+
+BUTTON_SAVE.addEventListener("click", e => {
+	let filename_prefix = `${
+		filename
+	}_`;
+
+	let filename_suffix = `_${
+		sdf_width
+	}x${
+		sdf_height
+	}_-${
+		SDF_INNER_RANGE.toFixed(2)
+	}_+${
+		SDF_OUTER_RANGE.toFixed(2)
+	}${SDF_INVERT ? "_I" : ""}`;
+
+	if (OUTPUT_CANVAS.style.display != "none")
+		SaveCanvas(
+			sdf_img,
 			sdf_width,
 			sdf_height,
-			sdf_min,
-			sdf_max,
-			SDF_PERPENDICULAR,
-			SDF_INVERT,
-			SDF_FALSECOLOUR
+			filename_prefix + "RSDF" + filename_suffix
 		);
 
-		OUTPUT_CANVAS.width = sdf_width;
-		OUTPUT_CANVAS.height = sdf_height;
+	if (FALSECOLOUR_CANVAS.style.display != "none")
+		SaveCanvas(
+			falsecolour_img,
+			sdf_width,
+			sdf_height,
+			filename_prefix + "FalseColour" + filename_suffix
+		);
 
-		const img_data = CANVAS_CTX.getImageData(0,0,sdf_width,sdf_height);
-		const data = img_data.data;
-		sdf_img.forEach((v,i) => data[i] = v);
-		CANVAS_CTX.putImageData(img_data,0,0);
-
-		// TODO: Render corresponding colour texture for the RSDF
-		// TODO: Create combined preview using RSDF sampling in a shader
-	}
-);
+	if (SATURATED_CANVAS.style.display != "none")
+		SaveCanvas(
+			saturated_img,
+			sdf_width,
+			sdf_height,
+			filename_prefix + "Saturated" + filename_suffix
+		);
+});

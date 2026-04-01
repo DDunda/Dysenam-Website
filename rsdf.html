@@ -8,23 +8,27 @@
 		<script src="https://include.neocities.org/include.js"></script>
 		<script src="https://cdn.jsdelivr.net/npm/clipper-lib/clipper.min.js"></script>
 		<script src="https://cdn.jsdelivr.net/npm/path-data-polyfill/path-data-polyfill.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/pngjs/browser.min.js"></script>
 		<script src="/scripts/mark-nav.js"></script>
 	</head>
 	<body>
 		<script>include('/sections/header.html')</script>
 		<main>
-			<div class="frame" id="input_preview">
-				<div id="input_preview_name"></div>
-				<div id="input_preview_svg" style="max-width:50%"></div>
-				<canvas id="output-canvas" width="1024" height="1024" style="max-width: 50%"></canvas>
-				<input id="upload_input" type="file" name="upload_input" accept="image/svg+xml"/>
+			<div class="frame" id="input-preview">
+				<div id="input-preview-name"></div>
+				<div id="input-preview-svg" style="width:50%"></div>
+				<canvas id="output-canvas" width="1024" height="1024" style="width: 50%; display: none"></canvas>
+				<canvas id="falsecolour-canvas" width="1024" height="1024" style="width: 50%; display: none"></canvas>
+				<canvas id="saturated-canvas" width="1024" height="1024" style="width: 50%; display: none"></canvas>
+				<input id="upload-input" type="file" name="upload-input" accept="image/svg+xml"/>
 			</div>
-			<form class="frame" id="rsdf-settings">
+			<div class="frame" id="rsdf-settings">
 				<!-- TODO: Add settings for SVG placement on texture -->
 				<!-- TODO: Add settings for margins -->
 				<!-- TODO: Add settings for precision, resolution -->
-				<button type="submit" id="button-convert">Convert</button>
-			</form>
+				<button id="button-convert">Convert</button>
+				<button id="button-save">Save</button>
+			</div>
 
 			<section id="credits">
 				<h2>Credits</h2>
