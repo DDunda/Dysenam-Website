@@ -1,6 +1,6 @@
-const POLY_STEP = Math.pow(2,-11);
-const CLEANUP_DELTA = POLY_STEP * Math.pow(2,-4);
-const WORKING_SCALE = Math.pow(2,16);
+const POLY_STEP = Math.pow(2,-9);
+const CLEANUP_DELTA = Math.pow(2,-20);
+const WORKING_SCALE = Math.pow(2,32);
 const DEBUG_LINE_THICKNESS = Math.pow(2,-11);
 const ADJACENCY_MAX_DISTANCE = POLY_STEP * Math.pow(2,-1);
 const ADJACENCY_ANGLE_STEPS = Math.pow(2,8);
