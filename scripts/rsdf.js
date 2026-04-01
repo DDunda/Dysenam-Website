@@ -1156,6 +1156,8 @@ function GetSignedDistanceToLayers(
 // Samples an SDF field for layers assumed to be the same colour
 function LayersToSDF(layers, width, height, viewbox)
 {
+	console.time("LayersToSDF");
+
 	// TODO: Add acceleration structure to discard layers and/or paths
 	let sdf = [];
 	let sample = {X:0,Y:0};
@@ -1174,6 +1176,9 @@ function LayersToSDF(layers, width, height, viewbox)
 		}
 		sdf.push(rowDat);
 	}
+
+	console.timeEnd("LayersToSDF");
+
 	return sdf;
 }
 
@@ -1184,6 +1189,8 @@ function ColouredLayersToSDFs(layers, width, height, viewbox)
 {
 	if (layers.length == 0)
 		return new Map();
+	
+	console.time("ColouredLayersToSDFs");
 
 	// Separate layers into groups of single colours
 	let colouredLayers = layers.reduce(
@@ -1207,25 +1214,34 @@ function ColouredLayersToSDFs(layers, width, height, viewbox)
 	);
 
 	// Create a different SDF for each colour
-	return new Map(
+	let sdfs = new Map(
 		[...colouredLayers.entries()]
-		.map(([colour,subLayers]) => [
-			colour,
-			LayersToSDF(subLayers, width, height, viewbox)
+		.map(([colour,subLayers],index,arr) => {
+			let sdf = LayersToSDF(subLayers, width, height, viewbox)
 			.map(row => row
 				.map(sample => {
 					// Set layer back to correct index
 					sample.layer = sample.layer ? subLayers[sample.layer].original_index : undefined;
 					return sample;
 				})
-			)
-		])
+			);
+			
+			console.timeLog("ColouredLayersToSDFs",`Finshed SDF ${index + 1}/${arr.length}`);
+
+			return [colour, sdf];
+		})
 	);
+
+	console.timeEnd("ColouredLayersToSDFs");
+
+	return sdfs;
 }
 
 function LayersCalculateVectors(layers)
 {
-	return layers
+	console.time("LayersCalculateVectors");
+
+	layers
 	.forEach(layer => layer.poly
 		.forEach(path => {
 			path
@@ -1248,6 +1264,10 @@ function LayersCalculateVectors(layers)
 			});
 		})
 	);
+
+	console.timeEnd("LayersCalculateVectors");
+
+	return layers;
 }
 
 function SDFsToImage(
@@ -1546,6 +1566,7 @@ function RenderSDF()
 	let sdf_min = -SDF_INNER_RANGE * WORKING_SCALE / SDF_SIZE;
 	let sdf_max = SDF_OUTER_RANGE * WORKING_SCALE / SDF_SIZE;
 
+	// Todo: Move processing to a web worker so the page does not lock up, and progress can be displayed
 	LayersCalculateVectors(layers, true);
 	let sdfs = ColouredLayersToSDFs(layers, sdf_width, sdf_height, viewbox);
 
