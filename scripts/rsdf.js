@@ -13,11 +13,6 @@ const SDF_SATURATE = true; // Whether to set distances to exclusively the minima
 const SDF_FALSECOLOUR = false; // Whether the SDF should render with false colour (fully opaque within 3 channels)
 const SDF_INNER_RANGE = 1; // Pixels relative to size of image
 const SDF_OUTER_RANGE = 1; // Pixels relative to size of image
-
-const UNION_ID        = "UNION";
-const INTERSECTION_ID = "INTERSECTION";
-const DIFFERENCE_ID   = "DIFFERENCE";
-const XOR_ID          = "XOR";
 const SDF_COLOUR_DEPTH = 8;
 const SDF_MAX_VALUE = Math.pow(2, SDF_COLOUR_DEPTH) - 1;
 
@@ -55,13 +50,6 @@ const CHANNEL_MAPPING = new Map([
 	[COLOUR3_COLOUR,2],
 	[COLOUR4_COLOUR,3],
 ]);
-
-const ID_MAP = {
-	[UNION_ID]:        ClipperLib.ClipType.ctUnion,
-	[INTERSECTION_ID]: ClipperLib.ClipType.ctIntersection,
-	[DIFFERENCE_ID]:   ClipperLib.ClipType.ctDifference,
-	[XOR_ID]:          ClipperLib.ClipType.ctXor,
-};
 
 const SVG_ELEMENTS = ["PATH","ELLIPSE","CIRCLE","POLGON","RECT","TEXT","G"];
 
