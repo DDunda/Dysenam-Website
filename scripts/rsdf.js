@@ -1653,19 +1653,26 @@ function SaveCanvas(data, width, height, name)
 }
 
 BUTTON_SAVE.addEventListener("click", e => {
-	let filename_prefix = `${
+	const filename_prefix = `${
 		filename
+	}_${
+		sdf_width == sdf_height 
+		? sdf_width
+		: `${sdf_width}x${sdf_height}`	
 	}_`;
 
-	let filename_suffix = `_${
-		sdf_width
-	}x${
-		sdf_height
-	}_-${
-		SDF_INNER_RANGE.toFixed(2)
-	}_+${
-		SDF_OUTER_RANGE.toFixed(2)
-	}${SDF_INVERT ? "_I" : ""}`;
+	const inner = SDF_INNER_RANGE.toFixed(2);
+	const outer = SDF_OUTER_RANGE.toFixed(2);
+
+	const filename_suffix = `_${
+		inner == outer
+		? (SDF_INNER_RANGE + SDF_OUTER_RANGE).toFixed(2)
+		: `-${inner}_+${outer}`
+	}${
+		SDF_INVERT
+		? "_Inverted"
+		: ""
+	}`;
 
 	if (OUTPUT_CANVAS.style.display != "none")
 		SaveCanvas(
