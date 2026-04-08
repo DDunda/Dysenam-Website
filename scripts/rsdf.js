@@ -99,91 +99,122 @@ function oklch_normalised_random(min_luma, max_luma, min_chroma, max_chroma, min
 // └             ┘   └     ┘
 function SVGMatMulVec(m,v)
 {
-	return [
+	return new Point(
 		v.X * m.a + v.Y * m.c + m.e,
 		v.X * m.b + v.Y * m.d + m.f,
-	];
+	);
 }
 
 function CreateSVGElement(name) {
 	return document.createElementNS("http://www.w3.org/2000/svg", name);
 }
 
-function PointDotProduct(a,b)
+class Point
 {
-	return a.X * b.X + a.Y * b.Y;
-}
+	constructor(X = 0, Y = X)
+	{
+		this.X = X;
+		this.Y = Y;
+	}
 
-function PointsEqual(a,b)
-{
-	return a.X == b.X && a.Y == b.Y;
-}
+	Add(other)
+	{
+		return new Point(
+			this.X + other.X,
+			this.Y + other.Y
+		);
+	}
 
-function PointAdd(a,b)
-{
-	return {
-		X: a.X + b.X,
-		Y: a.Y + b.Y
-	};
-}
+	Subtract(other)
+	{
+		return new Point(
+			this.X - other.X,
+			this.Y - other.Y
+		);
+	}
 
-function PointSubtract(a,b)
-{
-	return {
-		X: a.X - b.X,
-		Y: a.Y - b.Y
-	};
-}
+	Scale(scale)
+	{
+		return new Point(
+			this.X * scale,
+			this.Y * scale
+		);
+	}
 
-function PointScale(point,scale)
-{
-	return {
-		X: point.X * scale,
-		Y: point.Y * scale
-	};
-}
+	ScaleInv(scale)
+	{
+		return new Point(
+			this.X / scale,
+			this.Y / scale
+		);
+	}
 
-function PointScaleInv(point,scale)
-{
-	return {
-		X: point.X / scale,
-		Y: point.Y / scale
-	};
-}
+	LengthSqr()
+	{
+		return this.X * this.X + this.Y * this.Y;
+	}
 
-function PointLengthSqr(point)
-{
-	return PointDotProduct(point, point);
-}
+	Length()
+	{
+		return Math.sqrt(this.LengthSqr());
+	}
 
-function PointLength(point)
-{
-	return Math.sqrt(
-		PointLengthSqr(point)
-	);
-}
+	Normalised()
+	{
+		return this.ScaleInv(this.Length());
+	}
 
-function PointDistance(a,b)
-{
-	return PointLength(
-		PointSubtract(a,b)
-	);
-}
+	Abs()
+	{
+		return new Point(
+			Math.abs(this.X),
+			Math.abs(this.Y)
+		);
+	}
 
-function PointNormalise(point)
-{
-	return PointScaleInv(
-		point,
-		PointLength(point)
-	);
+	DotProduct(other)
+	{
+		return this.X * other.X + this.Y * other.Y;
+	}
+
+	static Equal(a,b)
+	{
+		return a.X == b.X && a.Y == b.Y;
+	}
+
+	static DistanceSqr(a,b)
+	{
+		return a.Subtract(b).LengthSqr();
+	}
+
+	static Distance(a,b)
+	{
+		return Math.hypot(a.X - b.X, a.Y - b.Y);
+	}
+
+	static Min(a,b)
+	{
+		return new Point(
+			Math.min(a.X,b.X),
+			Math.min(a.Y,b.Y)
+		);
+	}
+
+	static Max(a,b)
+	{
+		return new Point(
+			Math.max(a.X,b.X),
+			Math.max(a.Y,b.Y)
+		);
+	}
 }
 
 function NormalFromTangent(tangent)
 {
-	return {
-		X: tangent.Y,
-		Y: -tangent.X
-	};
+	return new Point(
+		tangent.Y,
+		-tangent.X
+	);
 }
 
 function SetAttributes(element, attributes)
@@ -250,7 +281,7 @@ function SimplifyPaths(paths)
 		path
 		.slice(1)
 		.filter(
-			(point,i) => !PointsEqual(point,path.at(i)),
+			(point,i) => !Point.Equal(point,path.at(i))
 		))
 	)
 	.filter(path => path.length > 1);
@@ -261,22 +292,22 @@ function SimplifyPaths(paths)
 // triangulated and combined with a corresponding "mass".
 function GetPathsCenter(paths)
 {
-	let sum = {X:0,Y:0};
+	let sum = new Point();
 	let count = 0;
 	paths.forEach(
 		path => path.forEach(
 			point => {
-				sum = PointAdd(sum, point);
+				sum = sum.Add(point);
 				count++;
 			}
 		)
 	);
-	return count > 0 ? PointScaleInv(sum, count) : undefined;
+	return count > 0 ? sum.ScaleInv(count) : undefined;
 }
 
 // Takes an svg as segments, and converts them
 // to a list of subpath polygon vertex lists.
-// Points are [x,y] arrays.
+// Points are Point objects.
 // Returns a path list of subpath lists of points.
 function SegmentsToPoints(segments)
 {
@@ -288,7 +319,7 @@ function SegmentsToPoints(segments)
 	let lastPoint = undefined;
 	let lastSControl = undefined;
 	let lastTControl = undefined;
-	let nextPoint = {X:0,Y:0};
+	let nextPoint = new Point();
 	let nextSControl = undefined;
 	let nextTControl = undefined;
 
@@ -299,7 +330,7 @@ function SegmentsToPoints(segments)
 	{
 		if (nextPoint)
 		{
-			curPath.push({X:nextPoint.X, Y:nextPoint.Y});
+			curPath.push(new Point(nextPoint.X, nextPoint.Y));
 			lastPoint = nextPoint;
 		}
 		
@@ -349,7 +380,7 @@ function SegmentsToPoints(segments)
 			if (curPath.length <= 1)
 				rPoints.pop(); // Empty or single-point path
 
-			nextPoint = {X: values.pop(), Y: values.pop()};
+			nextPoint = new Point(values.pop(), values.pop());
 
 			curPath = [];
 			rPoints.push(curPath);
@@ -358,9 +389,9 @@ function SegmentsToPoints(segments)
 		
 		if ("LHVZ".includes(type))
 		{
-			if      (type == "L") nextPoint = {X: values.pop(), Y: values.pop()};
-			else if (type == "H") nextPoint = {X: values.pop(), Y: lastPoint.Y};
-			else if (type == "V") nextPoint = {X: lastPoint.X, Y: values.pop()};
+			if      (type == "L") nextPoint = new Point(values.pop(), values.pop());
+			else if (type == "H") nextPoint = new Point(values.pop(), lastPoint.Y);
+			else if (type == "V") nextPoint = new Point(lastPoint.X, values.pop());
 			else if (type == "Z") nextPoint = curPath[0];
 			return;
 		}
@@ -370,14 +401,14 @@ function SegmentsToPoints(segments)
 		if (type == "C" || type == "S")
 		{			
 			let control1 = type == "C"
-				? {X: values.pop(), Y: values.pop()}
+				? new Point(values.pop(), values.pop())
 				: lastSControl;
-			let control2 = {X: values.pop(), Y: values.pop()};
-			nextPoint = {X: values.pop(), Y: values.pop()};
-			nextSControl = PointSubtract(PointScale(nextPoint, 2), control2);
+			let control2 = new Point(values.pop(), values.pop());
+			nextPoint = new Point(values.pop(), values.pop());
+			nextSControl = nextPoint.Scale(2).Subtract(control2);
 
-			if ((PointsEqual(control1,lastPoint) || PointsEqual(control1,nextPoint)) &&
-				(PointsEqual(control2,lastPoint) || PointsEqual(control2,nextPoint)))
+			if ((Point.Equal(control1,lastPoint) || Point.Equal(control1,nextPoint)) &&
+				(Point.Equal(control2,lastPoint) || Point.Equal(control2,nextPoint)))
 				return;
 
 			d += `C${control1.X},${control1.Y} ${control2.X},${control2.Y}`;
@@ -385,23 +416,23 @@ function SegmentsToPoints(segments)
 		else if (type == "Q" || type == "T")
 		{			
 			let control = type == "Q"
-				? {X:values.pop(), Y:values.pop()}
+				? new Point(values.pop(), values.pop())
 				: lastTControl;
-			nextPoint = {X: values.pop(), Y: values.pop()};
-			nextTControl = PointSubtract(PointScale(nextPoint, 2), control2);
+			nextPoint = new Point(values.pop(), values.pop());
+			nextTControl = nextPoint.Scale(2).Subtract(control2);
 
-			if (PointsEqual(control,lastPoint) || PointsEqual(control, nextPoint))
+			if (Point.Equal(control,lastPoint) || Point.Equal(control, nextPoint))
 				return;
 
 			d += `Q${control.X},${control.Y}`;
 		}
 		else // A
 		{
-			let radii = {X: values.pop(), Y: values.pop()};
+			let radii = new Point(values.pop(), values.pop());
 			let rotation = values.pop();
 			let large_arc = values.pop();
 			let sweep = values.pop();
-			nextPoint = {X: values.pop(), Y: values.pop()};
+			nextPoint = new Point(values.pop(), values.pop());
 				
 			d += `A${radii.X},${radii.Y} ${rotation} ${large_arc} ${sweep}`;
 		}
@@ -410,7 +441,7 @@ function SegmentsToPoints(segments)
 		curve.setAttribute("d",d);
 
 		// Some malformed geometry fails on tiny curves
-		if (PointDistance(lastPoint, nextPoint) <= POLY_STEP * svg_size)
+		if (Point.Distance(lastPoint, nextPoint) <= POLY_STEP * svg_size)
 			return;
 
 		let length = curve.getTotalLength();
@@ -425,7 +456,7 @@ function SegmentsToPoints(segments)
 		for (let j = 1; j < edges; j++)
 		{
 			let point = curve.getPointAtLength(j * step);
-			curPath.push({X: point.x, Y: point.y});
+			curPath.push(new Point(point.x, point.y));
 		}
 	});
 
@@ -449,10 +480,10 @@ function SVGRectToPoints(rect)
 	if (rx == 0 || ry == 0)
 	{
 		return [[
-			{X:x,  Y:y  },
-			{X:x+w,Y:y  },
-			{X:x+w,Y:y+h},
-			{X:x,  Y:y+h}
+			new Point(x,  y  ),
+			new Point(x+w,y  ),
+			new Point(x+w,y+h),
+			new Point(x,  y+h)
 		]];
 	}
 
@@ -745,9 +776,9 @@ function ConnectLayers(layers)
 				(p2,path) => path.reduce(
 					(p3,v,i) =>
 					{
-						let v1 = {X:v.X,Y:v.Y};
+						let v1 = new Point(v.X, v.Y);
 						let v2 = path[(i + 1) % path.length];
-						v2 = {X:v2.X,Y:v2.Y};
+						v2 = new Point(v2.X,v2.Y);
 
 						if (v2.X < v1.X || (v2.X == v1.X && v2.Y < v1.Y))
 							[v1,v2] = [v2,v1];
@@ -756,19 +787,19 @@ function ConnectLayers(layers)
 						tangent_angle = Math.round(
 							tangent_angle * ADJACENCY_ANGLE_STEPS / Math.PI
 						) % ADJACENCY_ANGLE_STEPS;
-						let tangent = {
-							X: Math.cos(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI),
-							Y: Math.sin(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI)
-						};
+						let tangent = new Point(
+							Math.cos(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI),
+							Math.sin(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI)
+						);
 
-						let minTangent = PointDotProduct(tangent,v1);
-						let maxTangent = PointDotProduct(tangent,v2);
+						let minTangent = tangent.DotProduct(v1);
+						let maxTangent = tangent.DotProduct(v2);
 
 						if (maxTangent < minTangent)
-							[minTangent, maxTangent] = [maxTangent,minTangent];
+							[minTangent, maxTangent] = [maxTangent, minTangent];
 
 						let normal = NormalFromTangent(tangent);
-						let offset = PointDotProduct(normal, PointAdd(v1,v2)) * .5;
+						let offset = normal.DotProduct(v1.Add(v2)) * .5;
 
 						let plane = `${tangent_angle},${Math.round(offset / (ADJACENCY_MAX_DISTANCE * WORKING_SCALE))}`;
 
@@ -1004,37 +1035,34 @@ function GetSignedDistanceToEdge(
 	let to_return = {};
 	to_return[DIST_LAYER] = layer;
 
-	if (PointsEqual(vert1,vert2))
+	if (Point.Equal(vert1,vert2))
 	{
-		let dist = PointDistance(vert1, point);
+		let dist = Point.Distance(vert1, point);
 		to_return[DIST_EUCLIDEAN] = dist;
 		to_return[DIST_PERPENDICULAR] = dist;
 		return to_return;
 	}
 
-	let _point = PointSubtract(point, vert1);
+	let _point = point.Subtract(vert1);
 
-	let t = PointDotProduct(_point, vert1.edge_tangent) / vert1.edge_len;
+	let t = _point.DotProduct(vert1.edge_tangent) / vert1.edge_len;
 
 	let closest;
-	
+
 	if (t <= 0)
 	{
-		if (PointDotProduct(
-			_point,
+		if (_point.DotProduct(
 			vert1.point_tangent
 		) < 0)
 			return undefined;
 		
-		closest = {X:0,Y:0};
+		closest = new Point(0,0);
 	}
 	else if (t >= 1)
 	{
-		if (PointDotProduct(
-			PointSubtract(
-				_point,
-				vert1.to_next
-			),
+		if (_point.Subtract(
+			vert1.to_next
+		).DotProduct(
 			vert2.point_tangent
 		) > 0)
 			return undefined;
@@ -1042,14 +1070,14 @@ function GetSignedDistanceToEdge(
 		closest = vert1.to_next;
 	}
 	else
-		closest = PointScale(vert1.to_next, t);
+		closest = vert1.to_next.Scale(t);
 
-	to_return[DIST_PERPENDICULAR] = PointDotProduct(_point, vert1.edge_normal);
+	to_return[DIST_PERPENDICULAR] = _point.DotProduct(vert1.edge_normal);
 
 	// TODO: Consider surrounding edges for better estimation for sign
 	let sign = to_return[DIST_PERPENDICULAR] < 0 ? -1 : 1; // Can't use Math.sign because it returns 0
 
-	to_return[DIST_EUCLIDEAN] = PointDistance(_point, closest) * sign;
+	to_return[DIST_EUCLIDEAN] = _point.Distance(closest) * sign;
 
 	return to_return;
 }
@@ -1096,7 +1124,7 @@ function GetSignedDistanceToPath(
 	);
 }
 
-// Signed distance to polygon as [[{X:...,Y:...}...]...], and point as {X:...,Y:...}
+// Signed distance to polygon as [[{X:...,Y:...}...]...], and point as a Point
 function GetSignedDistanceToPolygon(
 	polygon, 
 	point, 
@@ -1140,7 +1168,7 @@ function LayersToSDF(layers, width, height, viewbox)
 
 	// TODO: Add acceleration structure to discard layers and/or paths
 	let sdf = [];
-	let sample = {X:0,Y:0};
+	let sample = new Point();
 	for (let row = 0; row < height; row++)
 	{
 		sample.Y = ((row + 0.5) / height * viewbox.h + viewbox.y) * WORKING_SCALE / svg_size;
@@ -1215,20 +1243,18 @@ function LayersCalculateVectors(layers)
 			path
 			.forEach((point, pi) => {
 				let next_point = path[(pi + 1) % path.length];
-				point.to_next = PointSubtract(next_point, point);
-				point.edge_len = PointLength(point.to_next);
-				point.edge_tangent = PointScaleInv(point.to_next, point.edge_len);
+				next_point = new Point(next_point.X,next_point.Y);
+				point.to_next = next_point.Subtract(point);
+				point.edge_len = point.to_next.Length();
+				point.edge_tangent = point.to_next.ScaleInv(point.edge_len);
 				point.edge_normal = NormalFromTangent(point.edge_tangent);
 			});
 			path.
 			forEach((point, pi) => {
 				let last_point = path.at(pi - 1);
-				point.point_tangent = PointNormalise(
-					PointAdd(
-						last_point.edge_tangent,
-						point.edge_tangent
-					)
-				);
+				point.point_tangent = last_point.edge_tangent
+					.Add(point.edge_tangent)
+					.Normalised();
 			});
 		})
 	);
