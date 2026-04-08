@@ -1037,45 +1037,45 @@ function GetSignedDistanceToEdge(
 
 	if (Point.Equal(vert1,vert2))
 	{
-		let dist = Point.Distance(vert1, point);
 		to_return[DIST_EUCLIDEAN] = dist;
 		to_return[DIST_PERPENDICULAR] = dist;
 		return to_return;
+		const dist = Point.Distance(vert1, point);
 	}
 
-	let _point = point.Subtract(vert1);
+	const _point = point.Subtract(vert1);
 
-	let t = _point.DotProduct(vert1.edge_tangent) / vert1.edge_len;
+	const tangent = _point.DotProduct(vert1.edge_tangent) / vert1.edge_len;
+	to_return[DIST_PERPENDICULAR] = _point.DotProduct(vert1.edge_normal);
 
 	let closest;
 
-	if (t <= 0)
+	if (tangent <= 0)
 	{
-		if (_point.DotProduct(
-			vert1.point_tangent
-		) < 0)
+		if (_point
+			.DotProduct(vert1.point_tangent)
+			< 0
+		)
 			return undefined;
 		
 		closest = new Point(0,0);
 	}
-	else if (t >= 1)
+	else if (tangent >= 1)
 	{
-		if (_point.Subtract(
-			vert1.to_next
-		).DotProduct(
-			vert2.point_tangent
-		) > 0)
+		if (point
+			.Subtract(vert2)
+			.DotProduct(vert2.point_tangent)
+			> 0
+		)
 			return undefined;
 		
 		closest = vert1.to_next;
 	}
 	else
-		closest = vert1.to_next.Scale(t);
-
-	to_return[DIST_PERPENDICULAR] = _point.DotProduct(vert1.edge_normal);
+		closest = vert1.to_next.scale(tangent);
 
 	// TODO: Consider surrounding edges for better estimation for sign
-	let sign = to_return[DIST_PERPENDICULAR] < 0 ? -1 : 1; // Can't use Math.sign because it returns 0
+	const sign = to_return[DIST_PERPENDICULAR] < 0 ? -1 : 1; // Can't use Math.sign because it returns 0
 
 	to_return[DIST_EUCLIDEAN] = _point.Distance(closest) * sign;
 
@@ -1084,10 +1084,10 @@ function GetSignedDistanceToEdge(
 
 function GetClosestDist(dista, distb)
 {
-	if (dista == undefined)
+	if (dista === undefined)
 		return distb;
 
-	if (distb == undefined)
+	if (distb === undefined)
 		return dista;
 
 	if (Math.abs(dista[DIST_EUCLIDEAN]) < Math.abs(distb[DIST_EUCLIDEAN]))
@@ -1102,7 +1102,7 @@ function GetClosestDist(dista, distb)
 	return distb;
 }
 
-// Signed distance to path as [{X:...,Y:...}...]
+// Signed distance to path as [Point...]
 function GetSignedDistanceToPath(
 	path,
 	point,
@@ -1110,21 +1110,21 @@ function GetSignedDistanceToPath(
 	prevDist = undefined
 )
 {
-	return path.reduce((minDist, vert, vi) =>
+	return path.reduce((_prevDist, vert, vi) =>
 		GetClosestDist(
+			_prevDist,
 			GetSignedDistanceToEdge(
 				vert,
 				path[(vi + 1) % path.length],
 				point,
-				layer,
-			),
-			minDist
+				layer
+			)
 		),
 		prevDist
 	);
 }
 
-// Signed distance to polygon as [[{X:...,Y:...}...]...], and point as a Point
+// Signed distance to polygon as [[Point...]...], and point as a Point
 function GetSignedDistanceToPolygon(
 	polygon, 
 	point, 
@@ -1132,30 +1132,30 @@ function GetSignedDistanceToPolygon(
 	prevDist = undefined
 )
 {
-	return polygon.reduce((minDist, path) =>
+	return polygon.reduce((_prevDist, path) =>
 		GetSignedDistanceToPath(
 			path,
 			point,
 			layer,
-			minDist
+			_prevDist
 		),
 		prevDist
 	);
 }
 
-// Signed distance to layers as [{poly:[[{X:...,Y:...}...]...]...}...]
+// Signed distance to layers as [{poly:[[Point...]...]...}...]
 function GetSignedDistanceToLayers(
 	layers,
 	point,
 	prevDist = undefined
 )
 {
-	return layers.reduce((minDist, layer) =>
+	return layers.reduce((_prevDist, layer) =>
 		GetSignedDistanceToPolygon(
 			layer.poly,
 			point,
 			layer,
-			minDist
+			_prevDist
 		),
 		prevDist
 	);
@@ -1192,7 +1192,7 @@ function LayersToSDF(layers, width, height, viewbox)
 
 // Splits layers into differently coloured regions,
 // then renders an SDF for each one (up to four).
-// Returns a Map from Colour constants to [[{euclidean:...,perpendicular:...,layer:...,path:...,edge:...}...]...]
+// Returns a Map from Colour constants to [[{euclidean:...,perpendicular:...,layer:...}...]...]
 function ColouredLayersToSDFs(layers, width, height, viewbox)
 {
 	if (layers.length == 0)
@@ -1202,7 +1202,7 @@ function ColouredLayersToSDFs(layers, width, height, viewbox)
 
 	// Separate layers into groups of single colours
 	let colouredLayers = layers.reduce(
-		(prev, layer, li) =>
+		(prev, layer) =>
 		{
 			let colour = layer.graph_colour;
 
@@ -1305,7 +1305,7 @@ function SDFsToImage(
 
 function SaturateSDFImage(data)
 {
-	let data_out = []
+	let data_out = [];
 
 	for (let i = 0; i+3 < data.length; i += 4)
 	{
