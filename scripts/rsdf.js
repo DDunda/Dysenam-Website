@@ -18,9 +18,7 @@ const SDF_MAX_VALUE = Math.pow(2, SDF_COLOUR_DEPTH) - 1;
 
 const DIST_EUCLIDEAN = "de";
 const DIST_PERPENDICULAR = "dp";
-const DIST_LAYERINDEX = "li";
-const DIST_PATHINDEX = "pi";
-const DIST_EDGEINDEX = "ei";
+const DIST_LAYER = "l";
 
 const UNKNOWN_COLOUR = -1;
 const COLOUR1_COLOUR = 1;
@@ -51,7 +49,7 @@ const CHANNEL_MAPPING = new Map([
 	[COLOUR4_COLOUR,3],
 ]);
 
-const SVG_ELEMENTS = ["PATH","ELLIPSE","CIRCLE","POLGON","RECT","TEXT","G"];
+const SVG_ELEMENTS = ["PATH","ELLIPSE","CIRCLE","POLYGON","RECT","TEXT","G"];
 
 const ARG_COUNT = {
 	// Move (new subpath):
@@ -353,7 +351,7 @@ function SegmentsToPoints(segments)
 
 			nextPoint = {X: values.pop(), Y: values.pop()};
 
-			curPath = []
+			curPath = [];
 			rPoints.push(curPath);
 			return;
 		}
@@ -367,7 +365,7 @@ function SegmentsToPoints(segments)
 			return;
 		}
 		
-		let d = `M${lastPoint.X},${lastPoint.Y} `
+		let d = `M${lastPoint.X},${lastPoint.Y} `;
 
 		if (type == "C" || type == "S")
 		{			
@@ -565,7 +563,9 @@ function SVGExtractGraphics(root)
 function GraphicsToLayers(graphics)
 {
 	return graphics
-	.filter(e => e.element.tagName && ["PATH","RECT"].includes(e.element.tagName.toUpperCase())) // TODO: Support ELLIPSE, CIRCLE, POLYGON, TEXT
+	.filter(e => e.element.tagName &&
+		// TODO: Support ELLIPSE, CIRCLE, POLYGON, TEXT
+		["PATH","RECT"].includes(e.element.tagName.toUpperCase()))
 	.map(e => {
 		e.points = SVGElementToPoints(e.element);
 		// TODO: Respect stroke data by using jsclipper offset functions, and difference clipping
@@ -689,7 +689,7 @@ function FuseLayerColours(layers)
 			return {
 				poly: subj_poly,
 				fill: colour
-			}
+			};
 		}
 	).filter(layer => layer.poly.flat(1).length > 0);
 }
@@ -721,9 +721,9 @@ function SeparateLayerPolys(layers)
 					poly: ClipperLib.JS.ExPolygonsToPaths([exp]),
 					fill: layer.fill
 				})
-			)
+			);
 		}
-	)
+	);
 	return new_layers;
 }
 
@@ -778,7 +778,7 @@ function ConnectLayers(layers)
 						p3.get(plane).push({
 							min: minTangent,
 							max: maxTangent,
-							index:layerIndex
+							index: layerIndex
 						});
 						return p3;
 					},
@@ -998,15 +998,11 @@ function GetSignedDistanceToEdge(
 	vert1,
 	vert2,
 	point,
-	layerIndex,
-	pathIndex,
-	edgeIndex
+	layer,
 	)
 {
 	let to_return = {};
-	to_return[DIST_LAYERINDEX] = layerIndex;
-	to_return[DIST_PATHINDEX] = pathIndex;
-	to_return[DIST_EDGEINDEX] = edgeIndex;
+	to_return[DIST_LAYER] = layer;
 
 	if (PointsEqual(vert1,vert2))
 	{
@@ -1082,8 +1078,7 @@ function GetClosestDist(dista, distb)
 function GetSignedDistanceToPath(
 	path,
 	point,
-	layerIndex,
-	pathIndex,
+	layer,
 	prevDist = undefined
 )
 {
@@ -1093,9 +1088,7 @@ function GetSignedDistanceToPath(
 				vert,
 				path[(vi + 1) % path.length],
 				point,
-				layerIndex,
-				pathIndex,
-				vi
+				layer,
 			),
 			minDist
 		),
@@ -1107,16 +1100,15 @@ function GetSignedDistanceToPath(
 function GetSignedDistanceToPolygon(
 	polygon, 
 	point, 
-	layerIndex, 
+	layer, 
 	prevDist = undefined
 )
 {
-	return polygon.reduce((minDist, path, pi) =>
+	return polygon.reduce((minDist, path) =>
 		GetSignedDistanceToPath(
 			path,
 			point,
-			layerIndex,
-			pi,
+			layer,
 			minDist
 		),
 		prevDist
@@ -1130,11 +1122,11 @@ function GetSignedDistanceToLayers(
 	prevDist = undefined
 )
 {
-	return layers.reduce((minDist, layer, li) =>
+	return layers.reduce((minDist, layer) =>
 		GetSignedDistanceToPolygon(
 			layer.poly,
 			point,
-			li,
+			layer,
 			minDist
 		),
 		prevDist
@@ -1184,11 +1176,6 @@ function ColouredLayersToSDFs(layers, width, height, viewbox)
 	let colouredLayers = layers.reduce(
 		(prev, layer, li) =>
 		{
-			// Used to map back to indexes in the original layers list,
-			// after sdfs are constructed with subsets of the layers with
-			// different indexes.
-			layer.original_index = li;
-
 			let colour = layer.graph_colour;
 
 			if(!prev.has(colour))
@@ -1205,16 +1192,9 @@ function ColouredLayersToSDFs(layers, width, height, viewbox)
 	let sdfs = new Map(
 		[...colouredLayers.entries()]
 		.map(([colour,subLayers],index,arr) => {
-			let sdf = LayersToSDF(subLayers, width, height, viewbox)
-			.map(row => row
-				.map(sample => {
-					// Set layer back to correct index
-					sample.layer = sample.layer ? subLayers[sample.layer].original_index : undefined;
-					return sample;
-				})
-			);
+			let sdf = LayersToSDF(subLayers, width, height, viewbox);
 			
-			console.timeLog("ColouredLayersToSDFs",`Finshed SDF ${index + 1}/${arr.length}`);
+			console.timeLog("ColouredLayersToSDFs",`Finished SDF ${index + 1}/${arr.length}`);
 
 			return [colour, sdf];
 		})
@@ -1324,7 +1304,7 @@ function InvertSDFImage(data)
 
 function FalseColourSDFImage(data)
 {
-	let data_out = []
+	let data_out = [];
 
 	for (let i = 0; i+3 < data.length; i += 4)
 	{
@@ -1370,7 +1350,12 @@ const CANVAS_CTX = OUTPUT_CANVAS.getContext("2d");
 const FALSECOLOUR_CTX = FALSECOLOUR_CANVAS.getContext("2d");
 const SATURATED_CTX = SATURATED_CANVAS.getContext("2d");
 
-UPLOAD_INPUT.addEventListener("change", e => {
+UPLOAD_INPUT.addEventListener("change", UploadSVG);
+BUTTON_CONVERT.addEventListener("click", UpdateLayers);
+BUTTON_SAVE.addEventListener("click", SaveSDFs);
+
+function UploadSVG(e)
+{
 	svg_overlay_group = null;
 
 	svg_input?.remove();
@@ -1393,7 +1378,7 @@ UPLOAD_INPUT.addEventListener("change", e => {
 	const reader = new FileReader();
 
 	reader.onload = () => {
-		SVG_NAME.textContent = `"${file.name}" (${file.size} bytes)`
+		SVG_NAME.textContent = `"${file.name}" (${file.size} bytes)`;
 		SVG_PREVIEW.innerHTML = reader.result;
 		svg_input = SVG_PREVIEW.querySelector("svg");
 		// Remove svg size so it fits to the page
@@ -1433,14 +1418,16 @@ UPLOAD_INPUT.addEventListener("change", e => {
 	};
 
 	reader.readAsText(file);
-});
+}
 
-BUTTON_CONVERT.addEventListener("click", e => {
+function UpdateLayers(e)
+{
 	svg_overlay_group?.remove();
 	svg_overlay_group = null;
 		
 	// TODO?: Support high-resolution bitmaps (completely different pipeline, but common use-case)
-	if (!svg_input) return;
+	if (!svg_input)
+		return;
 	
 	if (!layers)
 	{
@@ -1452,6 +1439,7 @@ BUTTON_CONVERT.addEventListener("click", e => {
 		layers = SeparateLayerPolys(layers);
 		layers = CullSmallLayers(layers);
 		layers = ConnectLayers(layers);
+		layers = LayersCalculateVectors(layers);
 	}
 	else
 	{
@@ -1459,87 +1447,79 @@ BUTTON_CONVERT.addEventListener("click", e => {
 	}
 
 	layers = GraphColourLayers(layers);
-	
-	svg_overlay_group = CreateSVGElement("g","overlay")
-	svg_input.appendChild(svg_overlay_group);
+	DisplayLayers();
 
-	layers.forEach(
-		layer => {
-			layer.points = CPolyToPoints(layer.poly);
-			layer.center = GetPathsCenter(layer.points);
-		}
-	);
+	setTimeout(RenderSDF,0);
+}
+
+function DisplayLayers()
+{	
+	svg_overlay_group = CreateSVGElement("g","overlay");
+	let edges = CreateSVGElement("g","edges");
+	let nodes = CreateSVGElement("g","nodes");
+
+	layers
+	.forEach((layer, i) => {
+		layer.points = CPolyToPoints(layer.poly);
+		layer.center = GetPathsCenter(layer.points);
+
+		let fill = VISUALISATION_COLOURS.get(layer.graph_colour);
+		//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
+		//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
+		AddPaths(
+			svg_overlay_group,
+			PathsToString(layer.points),
+			fill,
+			"#777",
+			svg_size * DEBUG_LINE_THICKNESS
+		);
+
+		layer.connections
+		.forEach(connection => {
+			if (connection.index < i)
+				return;
+			
+			let line = CreateSVGElement("line");
 	
-	layers.forEach(
-		(layer, i) => 
-		{
-			let fill = VISUALISATION_COLOURS.get(layer.graph_colour);
-			//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
-			//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
-			AddPaths(
-				svg_overlay_group,
-				PathsToString(layer.points),
-				fill,
-				"#777",
-				svg_size * DEBUG_LINE_THICKNESS
-			);
-		}
-	);
-	
-	layers.forEach(
-		(layer, i) =>
-		{
-			layer.connections.forEach(
-				connection => {
-					if (connection.index < i)
-						return;
-					
-					let line = CreateSVGElement("line");
-			
-					SetAttributes(
-						line,
-						{
-							stroke: "#F00",
-							"stroke-width": svg_size * DEBUG_LINE_THICKNESS,
-							"stroke-linejoin": "round",
-							x1: layer.center.X,
-							y1: layer.center.Y,
-							x2: connection.layer.center.X,
-							y2: connection.layer.center.Y,
-							r: 5
-						}
-					);
-					
-					svg_overlay_group.appendChild(line);
-				}
-			);
-			
-			let fill = VISUALISATION_COLOURS.get(layer.graph_colour);
-			//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
-			//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
-			
-			let circle = CreateSVGElement("circle");
-			
 			SetAttributes(
-				circle,
+				line,
 				{
-					fill: fill,
 					stroke: "#F00",
 					"stroke-width": svg_size * DEBUG_LINE_THICKNESS,
 					"stroke-linejoin": "round",
-					cx: layer.center.X,
-					cy: layer.center.Y,
-					r: svg_size * DEBUG_LINE_THICKNESS * 4
+					x1: layer.center.X,
+					y1: layer.center.Y,
+					x2: connection.layer.center.X,
+					y2: connection.layer.center.Y,
+					r: 5
 				}
 			);
 			
-			svg_overlay_group.appendChild(circle);
-		}
-	);
+			edges.appendChild(line);
+		});
+		
+		let circle = CreateSVGElement("circle");
+		
+		SetAttributes(
+			circle,
+			{
+				fill: fill,
+				stroke: "#F00",
+				"stroke-width": svg_size * DEBUG_LINE_THICKNESS,
+				"stroke-linejoin": "round",
+				cx: layer.center.X,
+				cy: layer.center.Y,
+				r: svg_size * DEBUG_LINE_THICKNESS * 4
+			}
+		);
+		
+		nodes.appendChild(circle);
+	});
 
-	// Interrupt function so the graph renders
-	setTimeout(RenderSDF, 0); 
-});
+	svg_overlay_group.appendChild(edges);
+	svg_overlay_group.appendChild(nodes);
+	svg_input.appendChild(svg_overlay_group);
+}
 
 function RenderSDF()
 {
@@ -1555,7 +1535,6 @@ function RenderSDF()
 	let sdf_max = SDF_OUTER_RANGE * WORKING_SCALE / SDF_SIZE;
 
 	// Todo: Move processing to a web worker so the page does not lock up, and progress can be displayed
-	LayersCalculateVectors(layers, true);
 	let sdfs = ColouredLayersToSDFs(layers, sdf_width, sdf_height, viewbox);
 
 	sdf_img = SDFsToImage(
@@ -1652,7 +1631,8 @@ function SaveCanvas(data, width, height, name)
 	download_link.remove();
 }
 
-BUTTON_SAVE.addEventListener("click", e => {
+function SaveSDFs(e)
+{
 	const filename_prefix = `${
 		filename
 	}_${
@@ -1697,4 +1677,4 @@ BUTTON_SAVE.addEventListener("click", e => {
 			sdf_height,
 			filename_prefix + "Saturated" + filename_suffix
 		);
-});
+}
