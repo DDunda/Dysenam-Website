@@ -16,10 +16,6 @@ const SDF_OUTER_RANGE = 1; // Pixels relative to size of image
 const SDF_COLOUR_DEPTH = 8;
 const SDF_MAX_VALUE = Math.pow(2, SDF_COLOUR_DEPTH) - 1;
 
-const DIST_EUCLIDEAN = "de";
-const DIST_PERPENDICULAR = "dp";
-const DIST_LAYER = "l";
-
 const UNKNOWN_COLOUR = -1;
 const COLOUR1_COLOUR = 1;
 const COLOUR2_COLOUR = 2;
@@ -206,6 +202,40 @@ class Point
 			Math.max(a.X,b.X),
 			Math.max(a.Y,b.Y)
 		);
+	}
+}
+
+class Dist
+{
+	constructor(
+		euclidean = Number.POSITIVE_INFINITY,
+		perpendicular = Number.POSITIVE_INFINITY,
+		layer = undefined
+	)
+	{
+		this.euclidean = euclidean;
+		this.perpendicular = perpendicular;
+		this.layer = layer;
+	}
+
+	static GetClosest(dista, distb)
+	{
+		if (dista === undefined)
+			return distb;
+
+		if (distb === undefined)
+			return dista;
+
+		if (dista.euclidean < distb.euclidean)
+			return dista;
+
+		if (dista.euclidean > distb.euclidean)
+			return distb;
+
+		if (Math.abs(dista.perpendicular) < Math.abs(distb.perpendicular))
+			return dista
+		
+		return distb;
 	}
 }
 
@@ -1032,21 +1062,16 @@ function GetSignedDistanceToEdge(
 	layer,
 	)
 {
-	let to_return = {};
-	to_return[DIST_LAYER] = layer;
-
 	if (Point.Equal(vert1,vert2))
 	{
-		to_return[DIST_EUCLIDEAN] = dist;
-		to_return[DIST_PERPENDICULAR] = dist;
-		return to_return;
 		const dist = Point.Distance(vert1, point);
+		return new Dist(dist, dist, layer);
 	}
 
 	const _point = point.Subtract(vert1);
 
 	const tangent = _point.DotProduct(vert1.edge_tangent) / vert1.edge_len;
-	to_return[DIST_PERPENDICULAR] = _point.DotProduct(vert1.edge_normal);
+	const perpendicular = _point.DotProduct(vert1.edge_normal);
 
 	let closest;
 
@@ -1071,36 +1096,18 @@ function GetSignedDistanceToEdge(
 		
 		closest = vert2;
 	}
-	else
-	{
-		// If perpendicular to the edge, then euclidean equals perpendicular
-		to_return[DIST_EUCLIDEAN] = Math.abs(to_return[DIST_PERPENDICULAR]);
-		return to_return;
-	}
+	else // If perpendicular to the edge, then euclidean equals perpendicular
+		return new Dist(
+			Math.abs(perpendicular),
+			perpendicular,
+			layer
+		);
 
-	to_return[DIST_EUCLIDEAN] = point.Distance(closest);
-
-	return to_return;
-}
-
-function GetClosestDist(dista, distb)
-{
-	if (dista === undefined)
-		return distb;
-
-	if (distb === undefined)
-		return dista;
-
-	if (dista[DIST_EUCLIDEAN] < distb[DIST_EUCLIDEAN])
-		return dista;
-
-	if (dista[DIST_EUCLIDEAN] > distb[DIST_EUCLIDEAN])
-		return distb;
-
-	if (Math.abs(dista[DIST_PERPENDICULAR]) < Math.abs(distb[DIST_PERPENDICULAR]))
-		return dista
-	
-	return distb;
+	return new Dist(
+		Point.Distance(point, closest),
+		perpendicular,
+		layer
+	);
 }
 
 // Signed distance to path as [Point...]
@@ -1112,7 +1119,7 @@ function GetSignedDistanceToPath(
 )
 {
 	return path.reduce((_prevDist, vert, vi) =>
-		GetClosestDist(
+		Dist.GetClosest(
 			_prevDist,
 			GetSignedDistanceToEdge(
 				vert,
@@ -1289,9 +1296,9 @@ function SDFsToImage(
 		.forEach(row => row
 			.forEach(sample => {
 				let dist = perpendicular
-					? sample[DIST_PERPENDICULAR]
-					: sample[DIST_EUCLIDEAN] *
-						(sample[DIST_PERPENDICULAR] < 0 ? -1 : 1);
+					? sample.perpendicular
+					: sample.euclidean *
+						(sample.perpendicular < 0 ? -1 : 1);
 
 				dist = (dist - min) / (max - min);
 				dist = dist > 0 ? (dist < 1 ? dist : 1) : 0;
