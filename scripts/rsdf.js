@@ -1200,7 +1200,7 @@ function LayersToSDF(layers, width, height, viewbox)
 
 // Splits layers into differently coloured regions,
 // then renders an SDF for each one (up to four).
-// Returns a Map from Colour constants to [[{euclidean:...,perpendicular:...,layer:...}...]...]
+// Returns a Map from Colour constants to [[Dist...]...]
 function ColouredLayersToSDFs(layers, width, height, viewbox)
 {
 	if (layers.length == 0)
