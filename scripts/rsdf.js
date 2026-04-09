@@ -1494,10 +1494,13 @@ function DisplayLayers()
 	let nodes = CreateSVGElement("g","nodes");
 
 	layers
-	.forEach((layer, i) => {
+	.forEach((layer) => {
 		layer.points = CPolyToPoints(layer.poly);
 		layer.center = GetPathsCenter(layer.points);
+	});
 
+	layers
+	.forEach((layer, i) => {
 		let fill = VISUALISATION_COLOURS.get(layer.graph_colour);
 		//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
 		//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
