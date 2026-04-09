@@ -239,6 +239,70 @@ class Dist
 	}
 }
 
+class Edge
+{
+	constructor(
+		vert1,
+		vert2,
+		layer
+	)
+	{
+		this.vert1 = vert1;
+		this.vert2 = vert2;
+		this.layer = layer;
+	}
+
+	SignedDistance(point)
+	{
+		if (Point.Equal(this.vert1,this.vert2))
+		{
+			const dist = Point.Distance(this.vert1, point);
+			return new Dist(dist, dist, this.layer);
+		}
+
+		const _point = point.Subtract(this.vert1);
+
+		const tangent = _point.DotProduct(this.vert1.edge_tangent) / this.vert1.edge_len;
+		const perpendicular = _point.DotProduct(this.vert1.edge_normal);
+
+		let closest;
+		
+		if (tangent <= 0)
+		{
+			if (_point
+				.DotProduct(this.vert1.point_tangent)
+				< 0
+			)
+				return undefined;
+			
+			closest = this.vert1;
+		}
+		else if (tangent >= 1)
+		{
+			if (point
+				.Subtract(this.vert2)
+				.DotProduct(this.vert2.point_tangent)
+				> 0
+			)
+				return undefined;
+			
+			closest = this.vert2;
+		}
+		else // If perpendicular to the edge, then euclidean equals perpendicular
+			return new Dist(
+				Math.abs(perpendicular),
+				perpendicular,
+				this.layer
+			);
+
+		return new Dist(
+			Point.Distance(point, closest),
+			perpendicular,
+			this.layer
+		);
+	}
+}
+
 function NormalFromTangent(tangent)
 {
 	return new Point(
@@ -1055,61 +1119,6 @@ function GraphColourLayers(layers)
 	return layers;
 }
 
-function GetSignedDistanceToEdge(
-	vert1,
-	vert2,
-	point,
-	layer,
-	)
-{
-	if (Point.Equal(vert1,vert2))
-	{
-		const dist = Point.Distance(vert1, point);
-		return new Dist(dist, dist, layer);
-	}
-
-	const _point = point.Subtract(vert1);
-
-	const tangent = _point.DotProduct(vert1.edge_tangent) / vert1.edge_len;
-	const perpendicular = _point.DotProduct(vert1.edge_normal);
-
-	let closest;
-
-	if (tangent <= 0)
-	{
-		if (_point
-			.DotProduct(vert1.point_tangent)
-			< 0
-		)
-			return undefined;
-		
-		closest = vert1;
-	}
-	else if (tangent >= 1)
-	{
-		if (point
-			.Subtract(vert2)
-			.DotProduct(vert2.point_tangent)
-			> 0
-		)
-			return undefined;
-		
-		closest = vert2;
-	}
-	else // If perpendicular to the edge, then euclidean equals perpendicular
-		return new Dist(
-			Math.abs(perpendicular),
-			perpendicular,
-			layer
-		);
-
-	return new Dist(
-		Point.Distance(point, closest),
-		perpendicular,
-		layer
-	);
-}
-
 // Signed distance to path as [Point...]
 function GetSignedDistanceToPath(
 	path,
@@ -1121,12 +1130,11 @@ function GetSignedDistanceToPath(
 	return path.reduce((_prevDist, vert, vi) =>
 		Dist.GetClosest(
 			_prevDist,
-			GetSignedDistanceToEdge(
+			new Edge(
 				vert,
 				path[(vi + 1) % path.length],
-				point,
 				layer
-			)
+			).SignedDistance(point)
 		),
 		prevDist
 	);
