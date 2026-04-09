@@ -1058,7 +1058,7 @@ function GetSignedDistanceToEdge(
 		)
 			return undefined;
 		
-		closest = new Point(0,0);
+		closest = vert1;
 	}
 	else if (tangent >= 1)
 	{
@@ -1069,15 +1069,16 @@ function GetSignedDistanceToEdge(
 		)
 			return undefined;
 		
-		closest = vert1.to_next;
+		closest = vert2;
 	}
 	else
-		closest = vert1.to_next.scale(tangent);
+	{
+		// If perpendicular to the edge, then euclidean equals perpendicular
+		to_return[DIST_EUCLIDEAN] = Math.abs(to_return[DIST_PERPENDICULAR]);
+		return to_return;
+	}
 
-	// TODO: Consider surrounding edges for better estimation for sign
-	const sign = to_return[DIST_PERPENDICULAR] < 0 ? -1 : 1; // Can't use Math.sign because it returns 0
-
-	to_return[DIST_EUCLIDEAN] = _point.Distance(closest) * sign;
+	to_return[DIST_EUCLIDEAN] = point.Distance(closest);
 
 	return to_return;
 }
@@ -1090,10 +1091,10 @@ function GetClosestDist(dista, distb)
 	if (distb === undefined)
 		return dista;
 
-	if (Math.abs(dista[DIST_EUCLIDEAN]) < Math.abs(distb[DIST_EUCLIDEAN]))
+	if (dista[DIST_EUCLIDEAN] < distb[DIST_EUCLIDEAN])
 		return dista;
 
-	if (Math.abs(dista[DIST_EUCLIDEAN]) > Math.abs(distb[DIST_EUCLIDEAN]))
+	if (dista[DIST_EUCLIDEAN] > distb[DIST_EUCLIDEAN])
 		return distb;
 
 	if (Math.abs(dista[DIST_PERPENDICULAR]) < Math.abs(distb[DIST_PERPENDICULAR]))
@@ -1289,7 +1290,8 @@ function SDFsToImage(
 			.forEach(sample => {
 				let dist = perpendicular
 					? sample[DIST_PERPENDICULAR]
-					: sample[DIST_EUCLIDEAN];
+					: sample[DIST_EUCLIDEAN] *
+						(sample[DIST_PERPENDICULAR] < 0 ? -1 : 1);
 
 				dist = (dist - min) / (max - min);
 				dist = dist > 0 ? (dist < 1 ? dist : 1) : 0;
