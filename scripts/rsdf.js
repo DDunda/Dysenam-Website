@@ -264,8 +264,6 @@ class Edge
 
 		const tangent = _point.DotProduct(this.vert1.edge_tangent) / this.vert1.edge_len;
 		const perpendicular = _point.DotProduct(this.vert1.edge_normal);
-
-		let closest;
 		
 		if (tangent <= 0)
 		{
@@ -275,7 +273,7 @@ class Edge
 			)
 				return undefined;
 			
-			closest = this.vert1;
+			var closest = this.vert1;
 		}
 		else if (tangent >= 1)
 		{
@@ -286,7 +284,7 @@ class Edge
 			)
 				return undefined;
 			
-			closest = this.vert2;
+			var closest = this.vert2;
 		}
 		else // If perpendicular to the edge, then euclidean equals perpendicular
 			return new Dist(
@@ -1181,24 +1179,25 @@ function GetSignedDistanceToLayers(
 function LayersToSDF(layers, width, height, viewbox)
 {
 	console.time("LayersToSDF");
+	const sdf = new Array(height);
+	for (let row = 0; row < height; row++)
+	{
+		sdf[row] = new Array(width);
+	}
 
 	// TODO: Add acceleration structure to discard layers and/or paths
-	let sdf = [];
-	let sample = new Point();
+	const sample = new Point();
 	for (let row = 0; row < height; row++)
 	{
 		sample.Y = ((row + 0.5) / height * viewbox.h + viewbox.y) * WORKING_SCALE / svg_size;
 
-		let rowDat = [];
+		const rowDat = sdf[row];
 		for (let col = 0; col < width; col++)
 		{
 			sample.X = ((col + 0.5) / width * viewbox.w + viewbox.x) * WORKING_SCALE / svg_size;
 
-			rowDat.push(
-				GetSignedDistanceToLayers(layers, sample)
-			);
+			rowDat[col] = GetSignedDistanceToLayers(layers, sample);
 		}
-		sdf.push(rowDat);
 	}
 
 	console.timeEnd("LayersToSDF");
@@ -1217,10 +1216,10 @@ function ColouredLayersToSDFs(layers, width, height, viewbox)
 	console.time("ColouredLayersToSDFs");
 
 	// Separate layers into groups of single colours
-	let colouredLayers = layers.reduce(
+	const colouredLayers = layers.reduce(
 		(prev, layer) =>
 		{
-			let colour = layer.graph_colour;
+			const colour = layer.graph_colour;
 
 			if(!prev.has(colour))
 				prev.set(colour,[]);
@@ -1236,7 +1235,7 @@ function ColouredLayersToSDFs(layers, width, height, viewbox)
 	let sdfs = new Map(
 		[...colouredLayers.entries()]
 		.map(([colour,subLayers],index,arr) => {
-			let sdf = LayersToSDF(subLayers, width, height, viewbox);
+			const sdf = LayersToSDF(subLayers, width, height, viewbox);
 			
 			console.timeLog("ColouredLayersToSDFs",`Finished SDF ${index + 1}/${arr.length}`);
 
