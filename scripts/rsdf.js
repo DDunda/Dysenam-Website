@@ -240,6 +240,13 @@ class Dist
 		
 		return distb;
 	}
+
+	get euclidean_signed()
+	{
+		return this.perpendicular < 0
+			? -this.euclidean
+			: this.euclidean;
+	}
 }
 
 class Edge
@@ -1838,8 +1845,7 @@ function SDFsToImage(
 			.forEach(sample => {
 				let dist = perpendicular
 					? sample.perpendicular
-					: sample.euclidean *
-						(sample.perpendicular < 0 ? -1 : 1);
+					: sample.euclidean_signed;
 
 				dist = (dist - min) / (max - min);
 				dist = dist > 0 ? (dist < 1 ? dist : 1) : 0;
