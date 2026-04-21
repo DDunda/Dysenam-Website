@@ -6,6 +6,14 @@ class Point
 		this.Y = Y;
 	}
 
+	Copy()
+	{
+		return new Point(
+			this.X,
+			this.Y
+		);
+	}
+
 	Add(other)
 	{
 		return new Point(
@@ -670,6 +678,48 @@ class BVHLeaf extends BVH
 	}
 }
 
+const BLEND_MODE = {
+	NORMAL:      0,
+	MULTIPLY:    1,
+	SCREEN:      2,
+	OVERLAY:     3,
+	DARKEN:      4,
+	LIGHTEN:     5,
+	DODGE:       6,
+	BURN:        7,
+	HARDLIGHT:   8,
+	SOFTLIGHT:   9,
+	DIFFERENCE: 10,
+	EXCLUSION:  11
+};
+
+const BLEND_MODE_MAP = {
+	normal:        BLEND_MODE.NORMAL,
+	multiply:      BLEND_MODE.MULTIPLY,
+	screen:        BLEND_MODE.SCREEN,
+	overlay:       BLEND_MODE.OVERLAY,
+	darken:        BLEND_MODE.DARKEN,
+	lighten:       BLEND_MODE.LIGHTEN,
+	"color-dodge": BLEND_MODE.DODGE,
+	"color-burn":  BLEND_MODE.BURN,
+	"hard-light":  BLEND_MODE.HARDLIGHT,
+	"soft-light":  BLEND_MODE.SOFTLIGHT,
+	difference:    BLEND_MODE.DIFFERENCE,
+	exclusion:     BLEND_MODE.EXCLUSION
+};
+
+// Dodge, burn: only for certain values
+// Overlay, hard light: only if their channels are on the same side of 0.5
+// Darken, lighten: only if their values are the same
+// Soft light: only if the second value is 0.5 (has no effect)
+// Difference: only if a or b == 0, or a = 1 for any b
+const MERGABLE_BLEND_MODES = new Set([
+	BLEND_MODE.NORMAL,
+	BLEND_MODE.MULTIPLY,
+	BLEND_MODE.SCREEN,
+	BLEND_MODE.EXCLUSION
+]);
+
 class RGB
 {
 	constructor(r,g,b,a=1)
@@ -743,18 +793,131 @@ class RGB
 			c.alpha ?? 1
 		);
 	}
+	
+	Copy()
+	{
+		return new RGB(
+			this.r,
+			this.g,
+			this.b,
+			this.a
+		);
+	}
 
 	static Equal(a, b)
 	{
-		return (a == undefined && b == undefined) || 
-		(
-			a != undefined && b != undefined &&
-			a.r == b.r &&
-			a.g == b.g &&
-			a.b == b.b &&
-			a.a == b.a
+		return (a == undefined && b == undefined) 
+		|| (
+			a != undefined && b != undefined
+			&& a.r == b.r
+			&& a.g == b.g
+			&& a.b == b.b
+			&& a.a == b.a
 		);
 	}
+
+	// https://www.w3.org/TR/compositing/#blendingnormal
+	static Normal(bkg, src)
+	{
+		return src;
+	}
+
+	// https://www.w3.org/TR/compositing/#blendingmultiply
+	static Multiply(bkg, src)
+	{
+		return bkg * src;
+	}
+
+	// https://www.w3.org/TR/compositing/#blendingscreen
+	static Screen(bkg, src)
+	{
+		return 1 - (1 - bkg) * (1 - src);
+	}
+
+	// https://www.w3.org/TR/compositing/#blendingoverlay
+	static Overlay(bkg, src)
+	{
+		return HardLight(src,bkg);
+	}
+
+	// https://www.w3.org/TR/compositing/#blendingdarken
+	static Darken(bkg, src)
+	{
+		return Math.min(src,bkg);
+	}
+
+	// https://www.w3.org/TR/compositing/#blendinglighten
+	static Lighten(bkg, src)
+	{
+		return Math.max(src,bkg);
+	}
+
+	// https://www.w3.org/TR/compositing/#blendingcolordodge
+	static Dodge(bkg, src)
+	{
+		if (bkg == 0)
+			return 0;
+		if (src == 1)
+			return 1
+		return Math.min(1, bkg / (1 - src));
+	}
+
+	// https://www.w3.org/TR/compositing/#blendingcolorburn
+	static Burn(bkg, src)
+	{
+		return 1 - Dodge(1 - bkg, 1 - src);
+	}
+
+	// https://www.w3.org/TR/compositing/#blendinghardlight
+	static HardLight(bkg, src)
+	{
+		return src <= 0.5
+			? Multiply(bkg, 2 * src)
+			: Screen(bkg, 2 * src - 1);
+	}
+
+	// https://www.w3.org/TR/compositing/#blendingsoftlight
+	static SoftLight(bkg, src)
+	{
+		const D = bkg <= 0.25
+			? ((16 * bkg - 12) * bkg + 4) * bkg
+			: Math.sqrt(bkg);
+
+		return bkg + (2 * src - 1) * (
+			src <= 0.5
+			? (1 - bkg) * bkg
+			: D - bkg
+		);
+	}
+
+	// https://www.w3.org/TR/compositing/#blendingdifference
+	static Difference(bkg, src)
+	{
+		return Math.abs(bkg-src);
+	}
+
+	// https://www.w3.org/TR/compositing/#blendingexclusion
+	static Exclusion(bkg, src)
+	{
+		return bkg + src - 2 * bkg * src;
+	}
+
+	// Operates upon individual channels as per the SVG spec:
+	// https://www.w3.org/TR/compositing/#blendingseparable
+	static SEPARABLE_BLEND_FUNCTIONS = new Map([
+		[BLEND_MODE.NORMAL,      RGB.Normal    ],
+		[BLEND_MODE.MULTIPLY,    RGB.Multiply  ],
+		[BLEND_MODE.SCREEN,      RGB.Screen    ],
+		[BLEND_MODE.OVERLAY,     RGB.Overlay   ],
+		[BLEND_MODE.DARKEN,      RGB.Darken    ],
+		[BLEND_MODE.LIGHTEN,     RGB.Lighten   ],
+		[BLEND_MODE.DODGE,       RGB.Dodge     ],
+		[BLEND_MODE.BURN,        RGB.Burn      ],
+		[BLEND_MODE.HARDLIGHT,   RGB.HardLight ],
+		[BLEND_MODE.SOFTLIGHT,   RGB.SoftLight ],
+		[BLEND_MODE.DIFFERENCE,  RGB.Difference],
+		[BLEND_MODE.EXCLUSION,   RGB.Exclusion ]
+	]);
 
 	static Lerp(mix, min, max)
 	{
@@ -771,11 +934,62 @@ class RGB
 			Lerp(mix, min.a, max.a)
 		);
 	}
+
+	// Layers two colours, with src on top, and bkg in the background
+	// https://www.w3.org/TR/compositing/#blending
+	static Blend(bkg, src, mode = BLEND_MODE.NORMAL)
+	{
+		if (src.a == 0)
+			return bkg;
+
+		if (bkg.a == 0)
+			return src;
+
+		// TODO: Support non-separable blend modes
+		const B = RGB.SEPARABLE_BLEND_FUNCTIONS.get(mode) ?? RGB.Normal;
+
+		let result = new RGB(
+			B(bkg.r, src.r),
+			B(bkg.g, src.g),
+			B(bkg.b, src.b),
+			1
+		);
+
+		if (src.a == 1)
+			return RGB.Lerp(bkg.a, src, result);
+		
+		if (bkg.a == 1)
+			return RGB.Lerp(src.a, bkg, result);
+
+		result.a = bkg.a + src.a - bkg.a * src.a;
+
+		result.r = (result.r * bkg.a * src.a +
+			bkg.r * bkg.a * (1 - src.a) +
+			src.r * src.a * (1 - bkg.a)
+		) / result.a;
+
+		result.g = (result.g * bkg.a * src.a +
+			bkg.g * bkg.a * (1 - src.a) +
+			src.g * src.a * (1 - bkg.a)
+		) / result.a;
+
+		result.b = (result.b * bkg.a * src.a +
+			bkg.b * bkg.a * (1 - src.a) +
+			src.b * src.a * (1 - bkg.a)
+		) / result.a;
+
+		return result;
+	}
 }
 
 class Paint
 {
-	static FromString(text, bounds, opacity, root, linear = false)
+	constructor(blend_mode)
+	{
+		this.blend_mode = blend_mode;
+	}
+
+	static FromString(text, bounds, opacity, blend_mode, root, linear = false)
 	{
 		const URL_REGEX = /^url\((['"]?)\#(.+)\1\)$/;
 
@@ -785,7 +999,7 @@ class Paint
 		const colour = RGB.FromString(text, linear);
 
 		if (colour !== undefined)
-			return new PaintConstant(colour, opacity);
+			return new PaintConstant(colour, opacity, blend_mode);
 
 		if (!URL_REGEX.test(text))
 			throw new Error(`Paint.FromString: Expected colour, got '${text}'.`);
@@ -798,10 +1012,10 @@ class Paint
 		const tag = paint_element.tagName.toUpperCase();
  
 		if (tag == "LINEARGRADIENT")
-			return PaintGradientLinear.FromLinearElement(paint_element, bounds, opacity, linear);
+			return PaintGradientLinear.FromLinearElement(paint_element, bounds, opacity, blend_mode, linear);
 
 		if (tag == "RADIALGRADIENT")
-			return PaintGradientRadial.FromRadialElement(paint_element, bounds, opacity, linear);
+			return PaintGradientRadial.FromRadialElement(paint_element, bounds, opacity, blend_mode, linear);
 
 		throw new Error(`Paint.FromString: Attempted to retrieve gradient from URL, got '${paint_element.tagName}' element.`);
 	}
@@ -813,21 +1027,143 @@ class Paint
 
 		return a.constructor.Equal(a,b);
 	}
+
+	Blend(point, background)
+	{
+		const source = this.GetColour(point);
+
+		return RGB.Blend(background, source, this.blend_mode);
+	}
+
+	CompositeOver(other)
+	{
+		if (this.opaque)
+			return this.Copy();
+
+		return new PaintComposite(
+			[other,this],
+			1,
+			BLEND_MODE.NORMAL
+		);
+	}
 }
 
 class PaintConstant extends Paint
 {
-	constructor(colour, opacity = 1)
+	constructor(colour, opacity = 1, blend_mode = BLEND_MODE.NORMAL)
 	{
-		super();
-		this.colour = colour;
-		if (colour)
-			this.colour.a *= opacity;
+		super(blend_mode);
+		this.colour = colour.Copy();
+		this.colour.a *= opacity;
+	}
+
+	Copy()
+	{
+		return new PaintConstant(
+			this.colour,
+			1,
+			this.blend_mode
+		);
 	}
 
 	static Equal(a,b)
 	{
-		return RGB.Equal(a.colour, b.colour);
+		return a.blend_mode == b.blend_mode
+			&& RGB.Equal(a.colour, b.colour);
+	}
+
+	// Returns undefined if this cannot merge into a single paint
+	MergeAtop(other)
+	{
+		if (this.blend_mode != other.blend_mode)
+			return undefined;
+
+		const blend_mode = this.blend_mode;
+
+		if (!MERGABLE_BLEND_MODES.has(blend_mode))
+			return undefined;
+
+		if (other.constructor == PaintComposite)
+			return undefined;
+
+		const src = this.colour;
+
+		if (other.constructor == PaintConstant)
+		{
+			const bkg = other.colour;
+
+			return new PaintConstant(
+				RGB.Blend(
+					bkg,
+					src,
+				),
+				1,
+				blend_mode
+			);
+		}
+
+		const merged = other.Copy();
+
+		merged.stops
+		.forEach(stop => {
+			const bkg = stop.colour;
+
+			stop.colour = RGB.Blend(
+				bkg,
+				src
+			);
+		});
+
+		return merged;
+	}
+
+	MergeBelow(other)
+	{
+		if (this.blend_mode != other.blend_mode)
+			return undefined;
+
+		const blend_mode = this.blend_mode;
+		
+		if (!MERGABLE_BLEND_MODES.has(blend_mode))
+			return undefined;
+
+		if (other.constructor == PaintComposite)
+			return undefined;
+
+		const bkg = this.colour;
+
+		if (other.constructor == PaintConstant)
+		{
+			const src = other.colour;
+
+			return new PaintConstant(
+				RGB.Blend(
+					bkg,
+					src,
+				),
+				1,
+				blend_mode
+			);
+		}
+
+		const merged = other.Copy();
+
+		merged.stops
+		.forEach(stop => {
+			const src = stop.colour;
+
+			stop.colour = RGB.Blend(
+				bkg,
+				src
+			);
+		});
+
+		return merged;
+	}
+
+	ScaleOpacity(scale)
+	{
+		this.colour.a *= scale;
 	}
 
 	GetColour(point)
@@ -837,7 +1173,8 @@ class PaintConstant extends Paint
 
 	get opaque()
 	{
-		return this.colour?.a ?? 0 == 1;
+		return this.blend_mode == BLEND_MODE.NORMAL1
+			&& this.colour.a == 1;
 	}
 
 }
@@ -884,10 +1221,115 @@ class GradientStop
 		});
 	}
 
+	Copy()
+	{
+		return new GradientStop(
+			this.offset,
+			this.colour
+		);
+	}
+
 	static Equal(a,b)
 	{
-		return a.offset == b.offset &&
-			RGB.Equal(a.colour,b.colour);
+		return a.offset == b.offset
+			&& RGB.Equal(a.colour,b.colour);
+	}
+
+	static MergeStops(stops_bkg, stops_src, blend_mode)
+	{
+		if (stops_bkg.length == 0)
+			return stops_src;
+		if (stops_src.length == 0)
+			return stops_bkg;
+
+		let stops = [];
+
+		// Indexes
+		let b = 0, s = 0;
+
+		// Previous values
+		let pbo = stops_bkg[0].offset;
+		let pso = stops_src[0].offset;
+		let pbc = stops_bkg[0].colour;
+		let psc = stops_src[0].colour;
+
+		// Current values
+		let bo = pbo;
+		let so = pso;
+		let bc = pbc;
+		let sc = psc;
+		
+		do
+		{
+			// Selected offset and blend colours for next merged stop
+			const offset = Math.min(bo, so);
+			let bkg = bc;
+			let src = sc;
+
+			// Bkg is between src stops; override src with interpolation
+			if (s < stops_src.length && bo < so && so > pso)
+				src = RGB.Lerp(
+					(bo - pso) / (so - pso),
+					psc,
+					sc
+				);
+
+			// Src is between bkg stops; override bkg with interpolation
+			else if (b < stops_bkg.length && so < bo && bo > pbo)
+				bkg = RGB.Lerp(
+					(so - pbo) / (bo - pbo),
+					pbc,
+					bc
+				);
+
+			stops.push(
+				new GradientStop(
+					offset,
+					RGB.Blend(
+						bkg,
+						src,
+						blend_mode
+					)
+				)
+			);
+
+			// Move to next bkg stop
+			if (offset == bo)
+			{
+				pbo = bo;
+				pbc = bc;
+
+				b++;
+				
+				if (b >= stops_bkg.length)
+					bo = Number.POSITIVE_INFINITY;
+				else
+				{
+					bo = stops_bkg[b].offset;
+					bc = stops_bkg[b].colour;
+				}
+			}
+
+			// Move to next src stop
+			if (offset == so)
+			{
+				pso = so;
+				psc = sc;
+
+				s++;
+
+				if (s >= stops_src.length)
+					so = Number.POSITIVE_INFINITY;
+				else
+				{
+					so = stops_src[s].offset;
+					sc = stops_src[s].colour;
+				}
+			}
+		}
+		while (b != stops_bkg.length && s != stops_src.length);
+
+		return stops;
 	}
 
 	static GetColour(stops, offset, spread)
@@ -937,8 +1379,9 @@ class GradientStop
 
 class Gradient extends Paint
 {
-	constructor(stops, spread, opacity)
+	constructor(stops, spread, opacity, blend_mode)
 	{
+		super(blend_mode);
 		this.stops = stops.sort((a,b) => a.offset - b.offset);
 		this.spread = spread;
 
@@ -957,9 +1400,22 @@ class Gradient extends Paint
 		repeat: Gradient.SPREAD.REPEAT,
 	};
 
+	MergeBelow(other)
+	{
+		return other.MergeAbove(this);
+	}
+
+	ScaleOpacity(scale)
+	{
+		this.stops.forEach(stop =>
+			stop.colour.a *= scale
+		);
+	}
+
 	get opaque()
 	{
-		return this.stops.every(stop => stop.colour.a == 1);
+		return this.blend_mode == BLEND_MODE.NORMAL
+			&& this.stops.every(stop => stop.colour.a == 1);
 	}
 }
 
@@ -970,21 +1426,22 @@ class PaintGradientLinear extends Gradient
 		endb,
 		stops,
 		spread,
-		opacity
+		opacity,
+		blend_mode
 	)
 	{
 		if (stops.length == 0)
-			return new PaintConstant(undefined, opacity);
+			return undefined;
 
 		if (opacity == 0 || stops.every(stop => stop.a == 0))
-			return new PaintConstant(new RGB(0,0,0,0));
+			return new PaintConstant(new RGB(0,0,0,0), opacity, blend_mode);
 
 		if (stops.length == 1 ||
 			stops.slice(1)
 			.every(stop => RGB.Equal(stops[0].colour, stop.colour)))
-			return new PaintConstant(stops[0].colour, opacity);
+			return new PaintConstant(stops[0].colour, opacity, blend_mode);
 
-		super(stops, spread, opacity);
+		super(stops, spread, opacity, blend_mode);
 
 		this.enda = enda;
 		this.endb = endb;
@@ -992,7 +1449,7 @@ class PaintGradientLinear extends Gradient
 		this.tangent = endb.Subtract(enda).ScaleInv(this.distance);
 	}
 
-	static FromLinearElement(element, bounds, opacity, linear)
+	static FromLinearElement(element, bounds, opacity, blend_mode, linear)
 	{
 		const _x1 = element.x1?.baseVal;
 		const _y1 = element.y1?.baseVal;
@@ -1042,25 +1499,39 @@ class PaintGradientLinear extends Gradient
 			endb,
 			stops,
 			spread,
-			opacity
+			opacity,
+			blend_mode
+		);
+	}
+
+	Copy()
+	{
+		return new PaintGradientLinear(
+			this.enda.Copy(),
+			this.endb.Copy(),
+			this.stops.map(stop => stop.Copy()),
+			this.spread,
+			1,
+			this.blend_mode
 		);
 	}
 
 	static Equal(a,b)
 	{
-		return a.spread == b.spread &&
-			a.stops.length == b.stops.length &&
-			(
+		return a.blend_mode == b.blend_mode
+			&& a.spread == b.spread
+			&& a.stops.length == b.stops.length
+			&& (
 				(
-					Point.Equal(a.enda, b.enda) &&
-					Point.Equal(a.endb, b.endb) &&
-					a.stops.every((stop, i) => GradientStop.Equal(stop, b.stops[i]))
+					Point.Equal(a.enda, b.enda)
+					&& Point.Equal(a.endb, b.endb)
+					&& a.stops.every((stop, i) => GradientStop.Equal(stop, b.stops[i]))
 				) || (
-					Point.Equal(a.enda, b.endb) &&
-					Point.Equal(a.endb, b.enda) &&
-					a.stops.every((stop, i) => 
-						stop.offset == 1 - b.stops.at(-i - 1).offset &&
-						RGB.Equal(stop.colour, b.stops.at(-i - 1).colour)
+					Point.Equal(a.enda, b.endb)
+					&& Point.Equal(a.endb, b.enda)
+					&& a.stops.every((stop, i) => 
+						stop.offset == 1 - b.stops.at(-i - 1).offset
+						&& RGB.Equal(stop.colour, b.stops.at(-i - 1).colour)
 					)
 				)
 			);
@@ -1074,6 +1545,52 @@ class PaintGradientLinear extends Gradient
 
 		return GradientStop.GetColour(this.stops, offset, this.spread);
 	}
+
+	MergeAtop(other)
+	{
+		if (this.blend_mode != other.blend_mode)
+			return undefined;
+
+		const blend_mode = this.blend_mode;
+
+		if (!MERGABLE_BLEND_MODES.has(blend_mode))
+			return undefined;
+
+		if (other.constructor == PaintConstant)
+			return other.MergeBelow(this);
+
+		if (other.constructor != PaintGradientLinear)
+			return undefined;
+
+		if (this.spread != other.spread)
+			return undefined;
+
+		const stops_a = this.stops.map(stop => stop.Copy());
+		const stops_b = other.stops.map(stop => stop.Copy());
+
+		if (Point.Equal(this.enda, other.endb) &&
+			Point.Equal(this.endb, other.enda))
+			stops_b.forEach(stop => stop.offset = 1 - stop.offset);
+		else if (
+			!Point.Equal(this.enda, other.enda) ||
+			!Point.Equal(this.endb, other.endb))
+			return undefined;
+
+		const stops = GradientStop.MergeStops(
+			stops_a,
+			stops_b,
+			blend_mode
+		);
+
+		return new PaintGradientLinear(
+			this.enda.Copy(),
+			this.endb.Copy(),
+			stops,
+			this.spread,
+			1,
+			blend_mode
+		)
+	}
 }
 
 // A radial gradient, based on an outer and inner circle with stops.
@@ -1086,7 +1603,8 @@ class PaintGradientRadial extends Gradient
 		focus_radius,
 		stops,
 		spread,
-		opacity
+		opacity,
+		blend_mode
 	)
 	{
 		if (Point.Equal(focus, center))
@@ -1096,14 +1614,15 @@ class PaintGradientRadial extends Gradient
 				focus_radius,
 				stops,
 				spread,
-				opacity
+				opacity,
+				blend_mode
 			);
 
 		if (stops.length == 0)
-			return new PaintConstant(undefined,opacity);
+			return undefined;
 		
 		if (opacity == 0 || stops.every(stop => stop.colour.a == 0))
-			return new PaintConstant(new RGB(0,0,0,0));
+			return new PaintConstant(new RGB(0,0,0,0), opacity, blend_mode);
 
 		// All stops are the same colour
 		if (stops.length == 1 ||
@@ -1111,9 +1630,9 @@ class PaintGradientRadial extends Gradient
 			.every(stop =>
 				RGB.Equal(stops[0].colour, stop.colour)
 			))
-			return new PaintConstant(stops[0].colour, opacity);
+			return new PaintConstant(stops[0].colour, opacity, blend_mode);
 			
-		super(stops, spread, opacity);
+		super(stops, spread, opacity, blend_mode);
 
 		this.center = center;
 		this.radius = radius;
@@ -1133,7 +1652,7 @@ class PaintGradientRadial extends Gradient
 		this.tip_to_center = this.center.Subtract(this.cone_tip);
 	}
 
-	static FromRadialElement(element, bounds, opacity, linear)
+	static FromRadialElement(element, bounds, opacity, blend_mode, linear)
 	{
 		const max_radius = Math.min(
 			bounds.max.X - bounds.min.X,
@@ -1196,19 +1715,35 @@ class PaintGradientRadial extends Gradient
 			fr,
 			stops,
 			spread,
-			opacity
+			opacity,
+			blend_mode
+		);
+	}
+
+	Copy()
+	{
+		return new PaintGradientRadial(
+			this.center.Copy(),
+			this.radius,
+			this.focus.Copy(),
+			this.focus_radius,
+			this.stops.map(stop => stop.Copy()),
+			this.spread,
+			1,
+			this.blend_mode
 		);
 	}
 	
 	static Equal(a,b)
 	{
-		return a.focus_radius == b.focus_radius &&
-			a.radius == b.radius &&
-			Point.Equal(a.center, b.center) &&
-			Point.Equal(a.focus, b.focus) &&
-			a.spread == b.spread &&
-			a.stops.length == b.stops.length &&
-			a.stops.every((stop, i) => GradientStop.Equal(stop,b.stops[i]));
+		return a.blend_mode == b.blend_mode
+			&& a.focus_radius == b.focus_radius
+			&& a.radius == b.radius
+			&& Point.Equal(a.center, b.center)
+			&& Point.Equal(a.focus, b.focus)
+			&& a.spread == b.spread
+			&& a.stops.length == b.stops.length
+			&& a.stops.every((stop, i) => GradientStop.Equal(stop,b.stops[i]));
 	}
 
 	GetColour(point)
@@ -1248,10 +1783,66 @@ class PaintGradientRadial extends Gradient
 
 		return GradientStop.GetColour(this.stops, offset, this.spread);
 	}
+
+	MergeAtop(other)
+	{
+		if (this.blend_mode != other.blend_mode)
+			return undefined;
+
+		const blend_mode = this.blend_mode;
+
+		if (!MERGABLE_BLEND_MODES.has(blend_mode))
+			return undefined;
+
+		if (other.constructor == PaintConstant)
+			return other.MergeBelow(this);
+
+		if (other.constructor != PaintGradientRadial)
+			return undefined;
+
+		if (this.spread != other.spread)
+			return undefined;
+
+		const stops_a = this.stops.map(stop => stop.Copy());
+		const stops_b = other.stops.map(stop => stop.Copy());
+
+		if (
+			this.radius == other.focus_radius &&
+			this.focus_radius == other.radius &&
+			Point.Equal(this.center, other.focus) &&
+			Point.Equal(this.focus, other.center)
+		)
+			stops_b.forEach(stop => stop.offset = 1 - stop.offset);
+		else if (!(
+			this.radius == other.radius &&
+			this.focus_radius == other.focus_radius &&
+			Point.Equal(this.center, other.center) &&
+			Point.Equal(this.focus, other.focus)
+		))
+			return undefined;
+
+		const stops = GradientStop.MergeStops(
+			stops_a,
+			stops_b,
+			blend_mode
+		);
+
+		return new PaintGradientRadial(
+			this.center.Copy(),
+			this.radius,
+			this.focus.Copy(),
+			this.focus_radius,
+			stops,
+			this.spread,
+			1,
+			blend_mode
+		)
+	}
 	
 	get opaque()
 	{
-		return !this.pointed
+		return this.blend_mode == BLEND_MODE.NORMAL
+			&& !this.pointed
 			&& this.stops.every(stop => stop.colour.a == 1);
 	}
 }
@@ -1265,27 +1856,41 @@ class PaintGradientRadialSimple extends Gradient
 		inner_radius,
 		stops,
 		spread,
-		opacity
+		opacity,
+		blend_mode
 	)
 	{
 		if (stops.length == 0)
-			return new PaintConstant(undefined, opacity);
+			return undefined;
 		
 		if (opacity == 0 || stops.every(stop => stop.a == 0))
-			return new PaintConstant(new RGB(0,0,0,0));
+			return new PaintConstant(new RGB(0,0,0,0), opacity, blend_mode);
 
 		if (stops.length == 1 ||
 			stops.slice(1)
 			.every(stop => RGB.Equal(stops[0].colour, stop.colour)))
-			return new PaintConstant(stops[0].colour, opacity);
+			return new PaintConstant(stops[0].colour, opacity, blend_mode);
 
-		super(stops, spread, opacity);
+		super(stops, spread, opacity, blend_mode);
 
 		this.center = center;
 		this.outer_radius = outer_radius;
 		this.inner_radius = inner_radius;
 
 		this.radius_range = outer_radius - inner_radius;
+	}
+
+	Copy()
+	{
+		return new PaintGradientRadialSimple(
+			this.center.Copy(),
+			this.outer_radius,
+			this.inner_radius,
+			this.stops.map(stop => stop.Copy()),
+			this.spread,
+			1,
+			this.blend_mode
+		);
 	}
 
 	GetColour(point)
@@ -1298,11 +1903,204 @@ class PaintGradientRadialSimple extends Gradient
 	
 	static Equal(a,b)
 	{
-		return a.inner_radius == b.inner_radius &&
-			a.outer_radius == b.outer_radius &&
-			Point.Equal(a.center, b.center) &&
-			a.spread == b.spread &&
-			a.stops.length == b.stops.length &&
-			a.stops.every((stop, i) => GradientStop.Equal(stop,b.stops[i]));
+		return a.blend_mode == b.blend_mode
+			&& a.inner_radius == b.inner_radius
+			&& a.outer_radius == b.outer_radius
+			&& Point.Equal(a.center, b.center)
+			&& a.spread == b.spread
+			&& a.stops.length == b.stops.length
+			&& a.stops.every((stop, i) => GradientStop.Equal(stop,b.stops[i]));
+	}
+
+	MergeAtop(other)
+	{
+		if (this.blend_mode != other.blend_mode)
+			return undefined;
+
+		const blend_mode = this.blend_mode;
+
+		if (!MERGABLE_BLEND_MODES.has(blend_mode))
+			return undefined;
+
+		if (other.constructor == PaintConstant)
+			return other.MergeBelow(this);
+
+		if (other.constructor != PaintGradientRadialSimple)
+			return undefined;
+
+		if (this.spread != other.spread ||
+			!Point.Equal(this.center, other.center))
+			return undefined;
+
+		const stops_a = this.stops.map(stop => stop.Copy());
+		const stops_b = other.stops.map(stop => stop.Copy());
+
+		if (
+			this.outer_radius == other.inner_radius &&
+			this.inner_radius == other.outer_radius
+		)
+			stops_b.forEach(stop => stop.offset = 1 - stop.offset);
+		else if (!(
+			this.outer_radius == other.outer_radius &&
+			this.inner_radius == other.inner_radius
+		))
+			return undefined;
+
+		const stops = GradientStop.MergeStops(
+			stops_a,
+			stops_b,
+			blend_mode
+		);
+
+		return new PaintGradientRadialSimple(
+			this.center.Copy(),
+			this.outer_radius,
+			this.inner_radius,
+			stops,
+			this.spread,
+			1,
+			blend_mode
+		)
+	}
+}
+
+// A "paint" that is actually a stack of paints composited together
+class PaintComposite extends Paint
+{
+	constructor(paints, opacity, blend_mode)
+	{
+		// Spill the contents of normal mode composites directly into this composite
+		paints = paints
+		.map(paint => {
+			if (paint.constructor !== PaintComposite
+				|| paint.blend_mode != BLEND_MODE.NORMAL)
+				return paint;
+			
+			return paint.sub_paints.map(sub_paint => {
+				sub_paint = sub_paint.Copy();
+				sub_paint.ScaleOpacity(paint.opacity);
+				return sub_paint;
+			});
+		})
+		.flat(1);
+
+		if (paints.length == 0)
+			return undefined;
+
+		if (opacity == 0)
+			return new PaintConstant(new RGB(0,0,0,0), 0, blend_mode);
+
+		let i = paints.length - 1;
+		for (; i > 0; i--)
+		{
+			if (paints[i].opaque)
+				break;
+
+			const merged = paints[i].MergeAtop(paints[i - 1]);
+			
+			if (merged == undefined)
+				continue;
+
+			// Remove this paint and the one below, replacing it with
+			// them merged together.
+			paints.splice(
+				i - 1,
+				2,
+				merged
+			);
+		}
+
+		// Either by being opaque or by merging onto all lower paints,
+		// there is now only one paint in this composite. Just return it instead,
+		// and inherit this composite's opacity and blend mode.
+		if (i == paints.length - 1)
+		{
+			const out = paints[i].Copy();
+			out.ScaleOpacity(opacity);
+			if (blend_mode != BLEND_MODE.NORMAL)
+				out.blend_mode = blend_mode;
+			return out;
+		}
+
+		super(blend_mode);
+
+		this.sub_paints = i > 0
+			? paints.slice(i)
+			: paints;
+	}
+
+	Copy()
+	{
+		return new PaintComposite(
+			this.sub_paints.map(paint => paint.Copy()),
+			this.opacity,
+			this.blend_mode
+		);
+	}
+
+	Blend(point, background)
+	{
+		if (this.blend_mode != BLEND_MODE.NORMAL)
+			return RGB.Blend(
+				background,
+				this.GetColour(point),
+				this.blend_mode
+			);
+		
+		return this.sub_paints
+		.reduce((bkg,paint) =>
+			{
+				const src = paint.GetColour(point);
+				src.a *= this.opacity;
+				return RGB.Blend(
+					bkg,
+					src,
+					paint.blend_mode
+				);
+			},
+			background
+		);
+	}
+
+	GetColour(point)
+	{
+		const colour = this.sub_paints
+		.slice(1)
+		.reduce((bkg,paint) => 
+			paint.Blend(
+				point,
+				bkg
+			),
+			this.sub_paints[0].GetColour(point)
+		);
+		colour.a *= this.opacity;
+
+		return colour;
+	}
+
+	get opaque()
+	{
+		return this.blend_mode == BLEND_MODE.NORMAL
+			&& this.opacity == 1
+			&& this.sub_paints.some(paint => paint.opaque);
+	}
+
+	static Equal(a,b)
+	{
+		return a.blend_mode == b.blend_mode
+			&& a.sub_paints.length == b.sub_paints.length
+			&& a.sub_paints.every((a_paint,i) =>
+				Paint.Equal(a_paint,b.sub_paints[i])
+			);
+	}
+
+	MergeAtop(other)
+	{
+		return undefined;
+	}
+
+	ScaleOpacity(scale)
+	{
+		this.opacity *= scale;
 	}
 }

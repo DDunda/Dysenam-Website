@@ -112,6 +112,25 @@ function GetAttributeOrStyle(element, name)
 		window.getComputedStyle(element).getPropertyValue(name);
 }
 
+function GetPolyClip(clipper, subject, clips, mode)
+{
+	let result = new ClipperLib.Paths();
+
+	clipper.Clear();
+	clipper.AddPaths(subject, ClipperLib.PolyType.ptSubject, true);
+	clips.forEach(clip => 
+		clipper.AddPaths(clip, ClipperLib.PolyType.ptClip, true)
+	);
+	clipper.Execute(
+		mode,
+		result,
+		ClipperLib.PolyFillType.pftNonZero,
+		ClipperLib.PolyFillType.pftNonZero
+	);
+
+	return result;
+}
+
 // Each argument is normalised (0-1) within the in-gamut range
 function oklch_normalised_wheel(luma, chroma, hue)
 {
@@ -529,30 +548,22 @@ function IdToCPoly(id)
 	);
 }
 
-function SVGExtractGraphics(root)
+function SVGExtractGraphics(element, matrix = undefined, root = element)
 {
-	const graphics = [];
-	const to_visit = [...root.children]
-	.map(child => ({
-		element: child,
-		matrix: child.transform?.baseVal.consolidate()?.matrix ?? new DOMMatrix(),
-		opacity: 1
-	}));
-
-	while (to_visit.length > 0)
-	{
-		let e = to_visit.pop();
+	return [...element.children]
+	.map(child => ({element: child}))
+	.filter(e => {
 		const tag = e.element.tagName.toUpperCase();
 
 		// Unknown element
 		if (!SVG_ELEMENTS.includes(tag))
-			continue;
+			return false;
 
 		const computed_style = window.getComputedStyle(e.element);
 
 		// Element is not renderered
 		if (computed_style.getPropertyValue("display") == "none")
-			continue;
+			return false;
 			
 		const opacity = Clamp01(Number(
 			e.element.getAttribute("opacity")
@@ -561,40 +572,52 @@ function SVGExtractGraphics(root)
 		));
 
 		if (opacity <= 0)
-			continue;
+			return false;
 
-		// Is not a group; push as graphical element and continue
-		if (tag != "G")
+		const _blend_mode = window
+			.getComputedStyle(e.element)
+			.getPropertyValue("mix-blend-mode");
+
+		const blend_mode = BLEND_MODE_MAP[_blend_mode] ?? BLEND_MODE.NORMAL;
+		e.matrix = matrix;
+		e.group = tag == "G";
+
+		// If this element has a transform, apply the input matrix to it
+		if (e.element.transform?.baseVal !== undefined &&
+			e.element.transform.baseVal.numberOfItems > 0)
 		{
-			e.opacity *= opacity;
-			graphics.push(e);
-			continue;
+			e.matrix = e.element.transform.baseVal.consolidate().matrix;
+			e.matrix = matrix?.multiply(e.matrix) ?? e.matrix;
 		}
 
-		// Add the group's children to be visited
-		Array.from(e.element.children)
-		.forEach(
-			child => to_visit.push({
-				element: child,
-				opacity: e.opacity * opacity,
-				matrix: (child.transform?.baseVal.numberOfItems ?? 0) > 0
-					? DOMMatrix.fromMatrix(e.matrix).multiplySelf(
-						child.transform.baseVal.consolidate().matrix
-					)
-					: e.matrix
-			}),
-		);
-	}
-	return graphics.reverse(); // Reverse since the search was performed back-to-front
-}
+		if (e.group)
+		{
+			e.opacity = opacity;
+			e.blend_mode = blend_mode;
+			e.children = SVGExtractGraphics(e.element, e.matrix, root);
 
-function GraphicsToLayers(graphics, root)
-{
-	return graphics
-	.filter(e => {
+			if (e.children.length == 0)
+				return false;
+
+			if (blend_mode == BLEND_MODE.NORMAL)
+			{
+				e = e.children;
+				e = e.length == 1 ? e[0] : e;
+				return true;
+			}
+
+			if (e.children.length > 1)
+				return true;
+
+			// If the group only has one child, collapse the group
+			e.children[0].blend_mode = blend_mode;
+			e = e.children[0];
+
+			return true;
+		}
+
 		// TODO: Support POLYGON, TEXT
-		if (!["PATH","RECT","CIRCLE","ELLIPSE"]
-			.includes(e.element.tagName.toUpperCase()))
+		if (!["PATH","RECT","CIRCLE","ELLIPSE"].includes(tag))
 			return false;
 		
 		e.points = SVGElementToPoints(e.element);
@@ -602,7 +625,7 @@ function GraphicsToLayers(graphics, root)
 		if (e.points.flat(1).length == 0)
 			return false;
 
-		if (!e.matrix.isIdentity)
+		if (!(e.matrix?.isIdentity ?? true))
 		{
 			// Apply transform to get true coordinates
 			e.points = e.points.map(path =>
@@ -633,11 +656,11 @@ function GraphicsToLayers(graphics, root)
 			new Bounds(e.points[0][0], e.points[0][0])
 		);
 
-		// TODO: Store blending and transparency information
 		e.paint = Paint.FromString(
 			GetAttributeOrStyle(e.element, "fill"),
 			bounds,
-			e.opacity,
+			opacity,
+			blend_mode,
 			root,
 			COLOUR_LINEAR
 		);
@@ -648,14 +671,149 @@ function GraphicsToLayers(graphics, root)
 		if (e.paint === undefined)
 			return false;
 
-		if (e.paint.constructor === PaintConstant && (e.paint.colour?.a ?? 0) <= 0)
+		if (e.paint.constructor === PaintConstant && e.paint.colour.a <= 0)
 			return false;
 
 		delete e.points;
 		delete e.matrix;
 
 		return true;
+	})
+	.flat(1);
+}
+
+// Takes transparent layers and composites them onto layers beneath
+function FlattenGraphicsToLayers(graphics, is_root=true)
+{
+	if (is_root)
+		console.time("FlattenGraphicsToLayers");
+
+	graphics = graphics
+	.map(graphic => {
+		if (!graphic.group)
+			return graphic;
+
+		const children = FlattenGraphicsToLayers(graphic.children,false);
+		if (graphic.blend_mode != BLEND_MODE.NORMAL)
+			children.forEach(child =>
+				child.paint.blend_mode = graphic.blend_mode
+			);
+
+		return children;
+	})
+	.flat(1);
+
+	graphics = ClipOccludedLayers(graphics);
+
+	let clipper = new ClipperLib.Clipper();
+
+	for (let i = 1; i < graphics.length; i++)
+	{
+		const covering = graphics[i];
+
+		const union_polys = [];
+		const difference_polys = [];
+
+		for (let j = 0; j < i; j++)
+		{
+			const covered = graphics[j];
+
+			const composite_paint = covering.paint
+				.CompositeOver(covered.paint);
+
+			const composite_equals_covered = Paint.Equal(covered.paint, composite_paint);
+			const composite_equals_covering = Paint.Equal(covering.paint, composite_paint);
+			const equal_paints = Paint.Equal(covered.paint, covering.paint);
+			
+			// The intersection is different to both paints
+			if (!covering.paint.opaque && !composite_equals_covering && !composite_equals_covered)
+			{
+				const intersection = GetPolyClip(
+					clipper,
+					covered.poly,
+					[covering.poly],
+					ClipperLib.ClipType.ctIntersection
+				);
+				
+				if (intersection.flat(1).length > 0)
+				{
+					graphics.splice(j, 0,
+						{
+							paint: composite_paint,
+							poly: intersection
+						}
+					);
+					i++;
+					j++;
+
+					if (!equal_paints)
+						difference_polys.push(covered.poly)
+					else
+						difference_polys.push(intersection);
+				}
+			}
+
+			if (equal_paints) // Fuse these paints
+			{
+				union_polys.push(covered.poly);
+				covered.poly = [];
+			}
+			else
+			{
+				if (!composite_equals_covering && composite_equals_covered) // Cut the bottom out of the top
+				{
+					difference_polys.push(covered.poly);
+				}
+				if (!composite_equals_covered) // Cut the top out of the bottom
+				{
+					covered.poly = GetPolyClip(
+						clipper,
+						covered.poly,
+						[covering.poly],
+						ClipperLib.ClipType.ctDifference
+					);
+				}
+			}
+
+			if (covered.poly.flat(1).length == 0)
+			{
+				graphics.splice(j,1);
+				i--;
+				j--;
+			}
+		}
+
+		covering.poly = 
+		GetPolyClip(
+			clipper,
+			GetPolyClip(
+				clipper,
+				covering.poly,
+				union_polys,
+				ClipperLib.ClipType.ctUnion
+			),
+			difference_polys,
+			ClipperLib.ClipType.ctDifference
+		);
+
+		if (covering.poly.flat(1).length == 0)
+		{
+			graphics.splice(i,1);
+			i--;
+		}
+	}
+
+	graphics.filter(layer => {
+		layer.poly = ClipperLib.Clipper.SimplifyPolygons(layer.poly, ClipperLib.PolyFillType.pftNonZero);
+		layer.poly = ClipperLib.Clipper.CleanPolygons(layer.poly, CLEANUP_DELTA * WORKING_SCALE);
+		return layer.poly.flat(1).length > 0
+
 	});
+	
+	if (is_root)
+		console.timeEnd("FlattenGraphicsToLayers");
+
+	return graphics;
 }
 
 // Converts the points in a layer's polygon into a flat array of edge objects.
@@ -692,7 +850,6 @@ function ClipOccludedLayers(layers)
 	.filter(layer => {
 		if (clip_polys.length > 0)
 		{
-			// TODO: Respect transparency and non-opaque blend modes with separate stack
 			clipper.Clear();
 			clipper.AddPaths(layer.poly, ClipperLib.PolyType.ptSubject, true);
 			clipper.AddPaths(clip_polys, ClipperLib.PolyType.ptClip, true);
@@ -1696,10 +1853,7 @@ function UpdateLayers(e)
 	if (!layers)
 	{
 		const graphics = SVGExtractGraphics(svg_input);
-		layers = GraphicsToLayers(graphics, svg_input);
-		// TODO: Add transparency step, intersecting lower layers and setting fills to stacks of blends
-		layers = ClipOccludedLayers(layers);
-		layers = FuseLayerPaints(layers);
+		layers = FlattenGraphicsToLayers(graphics)
 		layers = SeparateLayerPolys(layers);
 		layers = CullSmallLayers(layers);
 		ConnectLayers(layers);
