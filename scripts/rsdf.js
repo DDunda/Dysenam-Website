@@ -13,8 +13,9 @@ const SDF_SATURATE = true; // Whether to set distances to exclusively the minima
 const SDF_FALSECOLOUR = false; // Whether the SDF should render with false colour (fully opaque within 3 channels)
 const SDF_INNER_RANGE = 1; // Pixels relative to size of image
 const SDF_OUTER_RANGE = 1; // Pixels relative to size of image
-const SDF_COLOUR_DEPTH = 8;
-const SDF_MAX_VALUE = Math.pow(2, SDF_COLOUR_DEPTH) - 1;
+
+const COLOUR_DEPTH = 8;
+const COLOUR_MAX_VALUE = Math.pow(2, COLOUR_DEPTH) - 1;
 
 const BVH_ENABLED = true; // Enable BVH acceleration
 const BVH_LEAF_MAX_COUNT = 40; // 40 seems good for mostly straight SVGs, and 72 for mostly curved.
@@ -1134,7 +1135,7 @@ function SDFsToImage(
 	let data = [];
 
 	for (let i = 0; i < width * height * 4; i++)
-		data.push(SDF_MAX_VALUE);
+		data.push(COLOUR_MAX_VALUE);
 
 	[...sdfs.entries()].forEach(([colour,rows]) => {
 		if (colour == UNKNOWN_COLOUR)
@@ -1152,7 +1153,7 @@ function SDFsToImage(
 				dist = (dist - min) / (max - min);
 				dist = dist > 0 ? (dist < 1 ? dist : 1) : 0;
 
-				data[index] = Math.round(dist * SDF_MAX_VALUE);
+				data[index] = Math.round(dist * COLOUR_MAX_VALUE);
 				index += 4;
 			})
 		)
@@ -1172,10 +1173,10 @@ function SaturateSDFImage(data)
 		let b = data[i+2];
 		let a = data[i+3];
 		let min = Math.min(r,g,b,a);
-		data_out.push(r == min ? 0 : SDF_MAX_VALUE);
-		data_out.push(g == min ? 0 : SDF_MAX_VALUE);
-		data_out.push(b == min ? 0 : SDF_MAX_VALUE);
-		data_out.push(a == min ? 0 : SDF_MAX_VALUE);
+		data_out.push(r == min ? 0 : COLOUR_MAX_VALUE);
+		data_out.push(g == min ? 0 : COLOUR_MAX_VALUE);
+		data_out.push(b == min ? 0 : COLOUR_MAX_VALUE);
+		data_out.push(a == min ? 0 : COLOUR_MAX_VALUE);
 	}
 
 	return data_out;
@@ -1183,7 +1184,7 @@ function SaturateSDFImage(data)
 
 function InvertSDFImage(data)
 {
-	return data.map(v => SDF_MAX_VALUE - v);
+	return data.map(v => COLOUR_MAX_VALUE - v);
 }
 
 function FalseColourSDFImage(data)
@@ -1199,7 +1200,7 @@ function FalseColourSDFImage(data)
 		data_out.push(r * 2 / 4 + g * 2 / 4);
 		data_out.push(g * 2 / 4 + b * 2 / 4);
 		data_out.push(b * 1 / 4 + a * 3 / 4);
-		data_out.push(SDF_MAX_VALUE);
+		data_out.push(COLOUR_MAX_VALUE);
 	}
 
 	return data_out;
@@ -1505,7 +1506,7 @@ function SaveCanvas(data, width, height, name)
 		{
 			width: width,
 			height: height,
-			bitDepth: SDF_COLOUR_DEPTH
+			bitDepth: COLOUR_DEPTH
 		}
 	);
 
