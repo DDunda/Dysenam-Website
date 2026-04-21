@@ -691,9 +691,13 @@ function CullSmallLayers(layers)
 
 function ConnectLayers(layers)
 {
-	let connections = [
+	layers.forEach(layer =>
+		layer.connections = new Set()
+	);
+
+	[
 		...layers.reduce(
-			(p1,layer,layerIndex) => layer.poly.reduce(
+			(p1,layer) => layer.poly.reduce(
 				(p2,path) => path.reduce(
 					(p3,v,i) =>
 					{
@@ -730,7 +734,7 @@ function ConnectLayers(layers)
 						p3.get(plane).push({
 							min: minTangent,
 							max: maxTangent,
-							index: layerIndex
+							layer: layer
 						});
 						return p3;
 					},
@@ -744,7 +748,7 @@ function ConnectLayers(layers)
 	.filter(
 		([k,v]) => v.length > 1
 	)
-	.reduce((nodeList,[k,v]) => 
+	.forEach(([k,v]) => 
 		{
 			for (let i = 0; i < v.length - 1; i++)
 			{
@@ -752,34 +756,15 @@ function ConnectLayers(layers)
 				{
 					if (v[i].max < v[j].min || v[i].min > v[j].max)
 						continue;
-
-					if (!(v[i].index in nodeList))
-						nodeList[v[i].index] = new Set();
-					if (!(v[j].index in nodeList))
-						nodeList[v[j].index] = new Set();
 					
-					nodeList[v[i].index].add(v[j].index);
-					nodeList[v[j].index].add(v[i].index);
+					v[i].layer.connections.add(v[j].layer);
+					v[j].layer.connections.add(v[i].layer);
 				}
 			}
-			
-			return nodeList;
-		},
-		{}
+		}
 	);
 	
 	// TODO: Annotate distances between all regions
-	
-	layers.forEach(
-		(layer, layerIndex) =>
-			layer.connections = [...(connections?.[layerIndex] ?? [])]
-			.map(
-				connectionIndex => ({
-					layer: layers[connectionIndex],
-					index: connectionIndex
-				})
-			)
-	);
 	
 	return layers;
 }
@@ -800,15 +785,15 @@ function MarkLayerColour(layer, colour)
 
 	layer.connections.forEach(
 		c => {
-			c.layer.neighbour_colours.set(
+			c.neighbour_colours.set(
 				layer.graph_colour,
-				c.layer.neighbour_colours.get(
+				c.neighbour_colours.get(
 					layer.graph_colour
 				 ) - 1
 			);
-			c.layer.neighbour_colours.set(
+			c.neighbour_colours.set(
 				colour,
-				c.layer.neighbour_colours.get(
+				c.neighbour_colours.get(
 					colour
 				 ) + 1
 			);
@@ -823,15 +808,12 @@ function GraphColourLayers(layers)
 	if (layers.length == 0)
 		return;
 
-	let input = new Set();
-	let unknown = new Set();
+	let input = new Set(layers);
 
 	layers
-	.forEach((layer,i) => {
-		input.add(i);
-		unknown.add(i);
-		layer.graph_colour ??= UNKNOWN_COLOUR;
-	});
+	.forEach(layer =>
+		layer.graph_colour = UNKNOWN_COLOUR
+	);
 	layers
 	.forEach(layer => {
 		layer.neighbour_colours = new Map(
@@ -840,9 +822,9 @@ function GraphColourLayers(layers)
 		);
 		layer.connections.forEach(connection =>
 			layer.neighbour_colours.set(
-				connection.layer.graph_colour, 
+				connection.graph_colour, 
 				layer.neighbour_colours.get(
-					connection.layer.graph_colour
+					connection.graph_colour
 				) + 1
 			)
 		);
@@ -856,8 +838,7 @@ function GraphColourLayers(layers)
 		// to only check dirty nodes.
 		for (let i = 0; i < input.size; i++)
 		{
-			let li = [...input][i];
-			let layer = layers[li];
+			let layer = [...input][i];
 			let possibleColours = GetPossibleLayerColours(layer);
 
 			if (possibleColours.size > 1)
@@ -867,7 +848,7 @@ function GraphColourLayers(layers)
 				throw new Error("Cannot colour graph!");				
 
 			MarkLayerColour(layer,[...possibleColours][0]);
-			input.delete(li);
+			input.delete(layer);
 			i = -1;
 		}
 
@@ -876,15 +857,14 @@ function GraphColourLayers(layers)
 
 		let trivial = new Set(
 			[...input]
-			.filter(li => {
-				let possibleColours = GetPossibleLayerColours(layers[li])
+			.filter(layer => {
+				let possibleColours = GetPossibleLayerColours(layer)
 				.size;
 
-				let unknownNeighbours = layers[li]
-				.connections
-				.filter(connection =>
-					input.has(connection.index) &&
-					connection.layer.graph_colour == UNKNOWN_COLOUR
+				let unknownNeighbours = [...(
+					layer.connections.intersection(input)
+				)].filter(connection =>
+					connection.graph_colour == UNKNOWN_COLOUR
 				).length;
 
 				return possibleColours > unknownNeighbours;
@@ -902,7 +882,7 @@ function GraphColourLayers(layers)
 		let mostConnected = [...input]
 		.slice(1)
 		.reduce((p,c) =>
-			layers[c].connections.length > layers[p].connections.length
+			c.connections.length > p.connections.length
 				? c
 				: p,
 			[...input][0]
@@ -912,9 +892,9 @@ function GraphColourLayers(layers)
 		// (Create a solver function that checks if a result is possible)
 
 		MarkLayerColour(
-			layers[mostConnected],
+			mostConnected,
 			[...GetPossibleLayerColours(
-				layers[mostConnected]
+				mostConnected
 			)][0]
 		);
 
@@ -927,22 +907,22 @@ function GraphColourLayers(layers)
 	.reverse()
 	.forEach(tg =>
 		[...tg].sort((a,b) =>
-			layers[a].neighbour_colours.get(UNKNOWN_COLOUR) -
-			layers[b].neighbour_colours.get(UNKNOWN_COLOUR)
+			a.neighbour_colours.get(UNKNOWN_COLOUR) -
+			b.neighbour_colours.get(UNKNOWN_COLOUR)
 		)
-		.forEach(li => { 
+		.forEach(layer => { 
 			let colours = [...GetPossibleLayerColours(
-				layers[li]
+				layer
 			)];
 			MarkLayerColour(
-				layers[li],
+				layer,
 				// TODO: Replace random selection with
 				// deterministic distance-optimised colour
 				colours[Math.floor(Math.random() * colours.length)]
 			);
 		})
 	);
-	
+
 	return layers;
 }
 
@@ -1364,6 +1344,7 @@ function UpdateLayers(e)
 
 function DisplayLayers()
 {	
+	const visited = new Set();
 	svg_overlay_group = CreateSVGElement("g","overlay");
 	let edges = CreateSVGElement("g","edges");
 	let nodes = CreateSVGElement("g","nodes");
@@ -1387,11 +1368,11 @@ function DisplayLayers()
 			svg_size * DEBUG_LINE_THICKNESS
 		);
 
-		layer.connections
+		visited.add(layer);
+
+		[...layer.connections
+			.difference(visited)]
 		.forEach(connection => {
-			if (connection.index < i)
-				return;
-			
 			let line = CreateSVGElement("line");
 	
 			SetAttributes(
@@ -1402,8 +1383,8 @@ function DisplayLayers()
 					"stroke-linejoin": "round",
 					x1: layer.center.X,
 					y1: layer.center.Y,
-					x2: connection.layer.center.X,
-					y2: connection.layer.center.Y,
+					x2: connection.center.X,
+					y2: connection.center.Y,
 					r: 5
 				}
 			);
