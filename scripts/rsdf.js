@@ -1525,15 +1525,15 @@ function DisplayLayers()
 	});
 
 	layers
-	.forEach((layer, i) => {
-		let fill = VISUALISATION_COLOURS.get(layer.graph_colour);
+	.forEach(layer => {
+		const fill = VISUALISATION_COLOURS.get(layer.graph_colour);
 		//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
 		//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
 		AddPaths(
 			svg_overlay_group,
 			PathsToString(layer.points),
 			fill,
-			"#777",
+			ClipperLib.JS.AreaOfPolygons(layer.poly) >= 0 ? "#777" : "#f33",
 			svg_size * DEBUG_LINE_THICKNESS
 		);
 
@@ -1554,7 +1554,6 @@ function DisplayLayers()
 					y1: layer.center.Y,
 					x2: connection.center.X,
 					y2: connection.center.Y,
-					r: 5
 				}
 			);
 			
