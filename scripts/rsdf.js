@@ -595,43 +595,34 @@ function LayerToEdges(layer)
 // Takes layers and clips what each layer occludes from beneath
 function ClipOccludedLayers(layers)
 {
-	let clip_polys = [];
+	const clip_polys = [];
 
-	let clipper = new ClipperLib.Clipper();
+	const clipper = new ClipperLib.Clipper();
 
 	return layers
 	.reverse() // Start from top layer
-	.map(
-		layer => {
-			if (clip_polys.length == 0)
-			{
-				clip_polys = clip_polys.concat(layer.poly);
-				return layer;
-			}
-
-			let solution_paths = new ClipperLib.Paths();
-
+	.filter(layer => {
+		if (clip_polys.length > 0)
+		{
 			// TODO: Respect transparency and non-opaque blend modes with separate stack
 			clipper.Clear();
 			clipper.AddPaths(layer.poly, ClipperLib.PolyType.ptSubject, true);
 			clipper.AddPaths(clip_polys, ClipperLib.PolyType.ptClip, true);
 			clipper.Execute(
 				ClipperLib.ClipType.ctDifference,
-				solution_paths,
+				layer.poly,
 				ClipperLib.PolyFillType.pftNonZero,
 				ClipperLib.PolyFillType.pftNonZero
 			);
-
-			clip_polys = clip_polys.concat(layer.poly);
-
-			layer.poly = solution_paths;
-
-			return layer;
 		}
-	)
-	.filter(
-		layer => layer.poly.flat(1).length > 0
-	)
+
+		if (layer.poly.flat(1).length == 0)
+			return false;
+		
+		clip_polys.push(...layer.poly);
+
+		return true;
+	})
 	.reverse();
 }
 
