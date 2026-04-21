@@ -368,6 +368,52 @@ function SegmentsToPoints(segments)
 	return SimplifyPaths(rPoints);
 }
 
+function SVGCircleToPoints(circle)
+{
+	let r = circle.getAttribute("r");
+
+	if (r === undefined)
+		console.log("SVGCircleToPoints: Expected r (radius) attribute");
+
+	r = Number(r);
+
+	const cx = Number(circle.getAttribute("cx") ?? 0);
+	const cy = Number(circle.getAttribute("cy") ?? 0);
+
+	const segments = [
+		{type: "M", values: [cx-r,cy]},
+		{type: "a", values: [r,r,0,0,1,2*r,0]},
+		{type: "a", values: [r,r,0,0,1,-2*r,0]}
+	];
+
+	return SegmentsToPoints(segments);
+}
+
+function SVGEllipseToPoints(ellipse)
+{
+	let rx = ellipse.getAttribute("rx");
+	let ry = ellipse.getAttribute("ry");
+
+	if (rx === undefined)
+		console.log("SVGEllipseToPoints: Expected rx (x radius) attribute");
+	if (ry === undefined)
+		console.log("SVGEllipseToPoints: Expected ry (y radius) attribute");
+
+	rx = Number(rx);
+	ry = Number(ry);
+
+	const cx = Number(ellipse.getAttribute("cx") ?? 0);
+	const cy = Number(ellipse.getAttribute("cy") ?? 0);
+
+	const segments = [
+		{type: "M", values: [cx-rx,cy]},
+		{type: "a", values: [rx,ry,0,0,1,2*rx,0]},
+		{type: "a", values: [rx,ry,0,0,1,-2*rx,0]}
+	];
+
+	return SegmentsToPoints(segments);
+}
+
 function SVGRectToPoints(rect)
 {
 	let x = Number(rect.getAttribute("x") ?? 0);
@@ -414,6 +460,8 @@ function SVGElementToPoints(element)
 	{
 		case "RECT": return SVGRectToPoints(element);
 		case "PATH": return SVGPathToPoints(element);
+		case "CIRCLE": return SVGCircleToPoints(element);
+		case "ELLIPSE": return SVGEllipseToPoints(element);
 	}
 	throw Error(`SVGElementToPoints: Unknown element tag '${element.tagName}'`);
 }
@@ -496,7 +544,7 @@ function GraphicsToLayers(graphics)
 	return graphics
 	.filter(e => e.element.tagName &&
 		// TODO: Support ELLIPSE, CIRCLE, POLYGON, TEXT
-		["PATH","RECT"].includes(e.element.tagName.toUpperCase()))
+		["PATH","RECT","CIRCLE","ELLIPSE"].includes(e.element.tagName.toUpperCase()))
 	.map(e => {
 		e.points = SVGElementToPoints(e.element);
 		// TODO: Respect stroke data by using jsclipper offset functions, and difference clipping
