@@ -647,7 +647,7 @@ function FuseLayerColours(layers)
 				fill: colour
 			};
 
-		const solution = new ClipperLib.Paths();
+		let solution = new ClipperLib.Paths();
 
 		clipper.Clear();
 
