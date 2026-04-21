@@ -800,12 +800,15 @@ function SeparateLayerPolys(layers)
 
 function CullSmallLayers(layers)
 {
-	return layers.filter(
-		layer => layer.poly.reduce(
-			(prev,path) => prev + ClipperLib.Clipper.Area(path),
-			0
-		) >= WORKING_SCALE * WORKING_SCALE * MIN_AREA
-	);
+	return layers.filter(layer => {
+		layer.poly = layer.poly.filter(
+			path => Math.abs(ClipperLib.Clipper.Area(path))
+				>= WORKING_SCALE * WORKING_SCALE * MIN_AREA
+		);
+		return layer.poly.flat(1).length > 0 &&
+			ClipperLib.JS.AreaOfPolygons(layer.poly)
+			>= WORKING_SCALE * WORKING_SCALE * MIN_AREA;
+	});
 }
 
 function ConnectLayers(layers)
