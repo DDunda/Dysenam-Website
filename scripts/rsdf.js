@@ -773,18 +773,29 @@ function ConnectLayers(layers)
 					const normal = NormalFromTangent(tangent);
 					const offset = normal.DotProduct(v1.Add(v2)) * .5;
 
-					const plane = `${tangent_angle},${Math.round(offset / (ADJACENCY_MAX_DISTANCE * WORKING_SCALE))}`;
+					const plane1 = `${tangent_angle},${Math.floor(offset / (ADJACENCY_MAX_DISTANCE * WORKING_SCALE))}`;
+					const plane2 = `${tangent_angle},${Math.ceil(offset / (ADJACENCY_MAX_DISTANCE * WORKING_SCALE))}`;
 
 					const segment = {
 						min: Math.min(extent1, extent2),
 						max: Math.max(extent1, extent2),
+						offset: offset,
+						direction: -Math.sign(tangent.DotProduct(_v1.Subtract(_v2))),
 						layer: layer
 					};
 
-					if (!planes.has(plane))
-						planes.set(plane,[]);
+					if (!planes.has(plane1))
+						planes.set(plane1,[]);
 					
-					planes.get(plane).push(segment);
+					planes.get(plane1).push(segment);
+
+					if (plane2 == plane1)
+						return;
+					
+					if (!planes.has(plane2))
+						planes.set(plane2,[]);
+					
+					planes.get(plane2).push(segment);
 				})
 			);
 
@@ -800,7 +811,15 @@ function ConnectLayers(layers)
 		{
 			for (let j = i - 1; j >= 0; j--)
 			{
-				if (v[i].max < v[j].min || v[i].min > v[j].max)
+				if (v[i].max <= v[j].min || v[i].min >= v[j].max)
+					continue;
+
+				// These edges must be facing opposite ways
+				if (v[i].direction == v[j].direction)
+					continue;
+
+				if (Math.abs(v[i].offset - v[j].offset)
+					>= ADJACENCY_MAX_DISTANCE * WORKING_SCALE)
 					continue;
 				
 				v[i].layer.connections.add(v[j].layer);
