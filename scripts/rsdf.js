@@ -11,11 +11,22 @@ const SDF_PERPENDICULAR = false; // Whether distance should be perpendicular rat
 const SDF_INVERT = false; // Whether to map distances from [0,1] to [1,0]
 const SDF_SATURATE = true; // Whether to set distances to exclusively the minima. Good for debugging, finding doubles, making colour maps by hand...
 const SDF_FALSECOLOUR = false; // Whether the SDF should render with false colour (fully opaque within 3 channels)
+const SDF_COLOUR = true; // Whether the SDF should render the image colour
 const SDF_INNER_RANGE = 1; // Pixels relative to size of image
 const SDF_OUTER_RANGE = 1; // Pixels relative to size of image
 
+const BLEED = {
+	CLOSEST: 0, // Pick the true closest channel
+	AVERAGE: 1, // Average the minimum channels' colours
+	MARK: 2 // Ignore the input colour and mark with an error colour
+};
+
 const COLOUR_DEPTH = 8;
 const COLOUR_MAX_VALUE = Math.pow(2, COLOUR_DEPTH) - 1;
+const COLOUR_LINEAR = false;
+const COLOUR_INVALID_FILL_COLOUR = new RGB(1,0,1,1);
+const COLOUR_BLEED_COLOUR = new RGB(1,0,1,1);
+const COLOUR_BLEED_MODE = BLEED.CLOSEST; // If two channels share a minima, which colour do you pick?
 
 const BVH_ENABLED = true; // Enable BVH acceleration
 const BVH_LEAF_MAX_COUNT = 40; // 40 seems good for mostly straight SVGs, and 72 for mostly curved.
@@ -75,6 +86,31 @@ const ARG_COUNT = {
 }
 
 const RELATIVE_ARGS = ["m","l","h","v","z","c","s","q","t","a"];
+
+const FILL_RULES = {
+	nonzero: ClipperLib.PolyFillType.pftNonZero,
+	evenodd: ClipperLib.PolyFillType.pftEvenOdd,
+};
+
+function Clamp01(value)
+{
+	if (value <= 0)
+		return 0;
+	if (value >= 1)
+		return 1;
+	return value;
+}
+
+function Lerp(mix, min, max)
+{
+	return min * (1 - mix) + max * mix;
+}
+
+function GetAttributeOrStyle(element, name)
+{
+	return element.getAttribute(name) ??
+		window.getComputedStyle(element).getPropertyValue(name);
+}
 
 // Each argument is normalised (0-1) within the in-gamut range
 function oklch_normalised_wheel(luma, chroma, hue)
@@ -495,30 +531,42 @@ function IdToCPoly(id)
 
 function SVGExtractGraphics(root)
 {
-	let graphics = [];
-	let to_visit = Array.from(root.children)
-	.map(child => (
-		{
-			element: child,
-			matrix: child.transform?.baseVal.consolidate()?.matrix ?? new DOMMatrix()
-		}
-	));
+	const graphics = [];
+	const to_visit = [...root.children]
+	.map(child => ({
+		element: child,
+		matrix: child.transform?.baseVal.consolidate()?.matrix ?? new DOMMatrix(),
+		opacity: 1
+	}));
 
 	while (to_visit.length > 0)
 	{
 		let e = to_visit.pop();
+		const tag = e.element.tagName.toUpperCase();
 
-		let tag = e.element.tagName.toUpperCase();
-		if (!SVG_ELEMENTS.includes(tag)) continue;
+		// Unknown element
+		if (!SVG_ELEMENTS.includes(tag))
+			continue;
+
+		const computed_style = window.getComputedStyle(e.element);
+
+		// Element is not renderered
+		if (computed_style.getPropertyValue("display") == "none")
+			continue;
+			
+		const opacity = Clamp01(Number(
+			e.element.getAttribute("opacity")
+			?? computed_style.getPropertyValue("opacity")
+			?? 1
+		));
+
+		if (opacity <= 0)
+			continue;
 
 		// Is not a group; push as graphical element and continue
 		if (tag != "G")
 		{
-			// TODO: Convert colours to a non-arbitrary format such that they may be fused later
-			// TODO: Store blending and transparency information
-			e.fill = e.element.fill || window.getComputedStyle(e.element).getPropertyValue("fill") || "rgb(0, 0, 0)";
-			e.stroke = e.element.stroke;
-			e.fill_type = ClipperLib.PolyFillType.pftNonZero;
+			e.opacity *= opacity;
 			graphics.push(e);
 			continue;
 		}
@@ -528,6 +576,7 @@ function SVGExtractGraphics(root)
 		.forEach(
 			child => to_visit.push({
 				element: child,
+				opacity: e.opacity * opacity,
 				matrix: (child.transform?.baseVal.numberOfItems ?? 0) > 0
 					? DOMMatrix.fromMatrix(e.matrix).multiplySelf(
 						child.transform.baseVal.consolidate().matrix
@@ -539,34 +588,73 @@ function SVGExtractGraphics(root)
 	return graphics.reverse(); // Reverse since the search was performed back-to-front
 }
 
-function GraphicsToLayers(graphics)
+function GraphicsToLayers(graphics, root)
 {
 	return graphics
-	.filter(e => e.element.tagName &&
-		// TODO: Support ELLIPSE, CIRCLE, POLYGON, TEXT
-		["PATH","RECT","CIRCLE","ELLIPSE"].includes(e.element.tagName.toUpperCase()))
-	.map(e => {
+	.filter(e => {
+		// TODO: Support POLYGON, TEXT
+		if (!["PATH","RECT","CIRCLE","ELLIPSE"]
+			.includes(e.element.tagName.toUpperCase()))
+			return false;
+		
 		e.points = SVGElementToPoints(e.element);
-		// TODO: Respect stroke data by using jsclipper offset functions, and difference clipping
+
+		if (e.points.flat(1).length == 0)
+			return false;
 
 		if (!e.matrix.isIdentity)
 		{
-			let matrix = e.matrix;
-
 			// Apply transform to get true coordinates
-			e.points = e.points.map(p => p.map(v => 
-				SVGMatMulVec(matrix, v)
-			));
+			e.points = e.points.map(path =>
+				path.map(point => 
+					SVGMatMulVec(e.matrix, point)
+				)
+			);
 		}
 
+		const _fill_rule = GetAttributeOrStyle(e.element, "fill-rule");
+		const fill_rule = FILL_RULES[_fill_rule] ?? FILL_RULES.nonzero;
+
 		e.poly = PointsToCPoly(e.points);
-		e.poly = ClipperLib.Clipper.SimplifyPolygons(e.poly, ClipperLib.PolyFillType.pftNonZero);
+		e.poly = ClipperLib.Clipper.SimplifyPolygons(e.poly, fill_rule);
 		e.poly = ClipperLib.Clipper.CleanPolygons(e.poly, CLEANUP_DELTA * WORKING_SCALE);
+
+		if (e.poly.flat(1).length == 0)
+			return false;
+
+		const bounds = e.points
+		.flat(1) // Check all points
+		.slice(1) // Skip the first, because it is the initial value
+		.reduce((_bounds,point) => {
+				_bounds.min = Point.Min(_bounds.min, point);
+				_bounds.max = Point.Max(_bounds.max, point);
+				return _bounds;
+			},
+			new Bounds(e.points[0][0], e.points[0][0])
+		);
+
+		// TODO: Store blending and transparency information
+		e.paint = Paint.FromString(
+			GetAttributeOrStyle(e.element, "fill"),
+			bounds,
+			e.opacity,
+			root,
+			COLOUR_LINEAR
+		);
+
+		// TODO: Respect stroke data by using jsclipper offset functions, and difference clipping
+		//e.stroke = GetAttributeOrStyle(e.element, "stroke");
+
+		if (e.paint === undefined)
+			return false;
+
+		if (e.paint.constructor === PaintConstant && (e.paint.colour?.a ?? 0) <= 0)
+			return false;
 
 		delete e.points;
 		delete e.matrix;
 
-		return e;
+		return true;
 	});
 }
 
@@ -626,25 +714,29 @@ function ClipOccludedLayers(layers)
 	.reverse();
 }
 
-function FuseLayerColours(layers)
+function FuseLayerPaints(layers)
 {
-	const colour_groups = new Map();
+	const paint_groups = new Map();
 	const clipper = new ClipperLib.Clipper();
 
 	layers.forEach(layer => {
-		if (!colour_groups.has(layer.fill))
-			colour_groups.set(layer.fill, []);
-		
-		colour_groups.get(layer.fill)
-		.push(layer.poly);
+		for (const [paint, arr] of paint_groups)
+		{			
+			if (!Paint.Equal(paint, layer.paint))
+				continue;
+
+			arr.push(layer.poly);
+			return;
+		}
+		paint_groups.set(layer.paint, [layer.poly]);
 	});
 	
-	return [...colour_groups.entries()]
-	.map(([colour,polys]) => {
+	return [...paint_groups.entries()]
+	.map(([paint, polys]) => {
 		if (polys.length < 2)
 			return {
 				poly: polys[0],
-				fill: colour
+				paint: paint
 			};
 
 		let solution = new ClipperLib.Paths();
@@ -667,7 +759,7 @@ function FuseLayerColours(layers)
 
 		return {
 			poly: solution,
-			fill: colour
+			paint: paint
 		};
 	})
 	.filter(layer => layer.poly.flat(1).length > 0);
@@ -698,7 +790,7 @@ function SeparateLayerPolys(layers)
 			expolygons.forEach(
 				exp => new_layers.push({
 					poly: ClipperLib.JS.ExPolygonsToPaths([exp]),
-					fill: layer.fill
+					paint: layer.paint
 				})
 			);
 		}
@@ -1154,12 +1246,12 @@ function LayersToSDF(layers, width, height, viewbox)
 // Splits layers into differently coloured regions,
 // then renders an SDF for each one (up to four).
 // Returns a Map from Colour constants to [[Dist...]...]
-function ColouredLayersToSDFs(layers, width, height, viewbox)
+function ColouredLayersToDistances(layers, width, height, viewbox)
 {
 	if (layers.length == 0)
 		return new Map();
 	
-	console.time("ColouredLayersToSDFs");
+	console.time("ColouredLayersToDistances");
 
 	// Separate layers into groups of single colours
 	const colouredLayers = layers.reduce(
@@ -1180,12 +1272,12 @@ function ColouredLayersToSDFs(layers, width, height, viewbox)
 	if (!BVH_ENABLED)
 	{
 		// Create a different SDF for each colour
-		var sdfs = new Map(
+		var dists = new Map(
 			[...colouredLayers.entries()]
 			.map(([colour,subLayers],index,arr) => {
 				const sdf = LayersToSDF(subLayers, width, height, viewbox);
 				
-				console.timeLog("ColouredLayersToSDFs",`Finished SDF ${index + 1}/${arr.length}`);
+				console.timeLog("ColouredLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
 
 				return [colour, sdf];
 			})
@@ -1193,7 +1285,7 @@ function ColouredLayersToSDFs(layers, width, height, viewbox)
 	}
 	else
 	{	
-		console.time("ColouredLayersToSDFs: BVH");
+		console.time("ColouredLayersToDistances: BVH");
 		
 		// Build a combined BVH for each set of layers
 		const bvhs = new Map(
@@ -1214,24 +1306,24 @@ function ColouredLayersToSDFs(layers, width, height, viewbox)
 				return [colour, bvh];
 			})
 		);
-		console.timeEnd("ColouredLayersToSDFs: BVH");
+		console.timeEnd("ColouredLayersToDistances: BVH");
 
-		var sdfs = new Map(
+		var dists = new Map(
 			[...bvhs.entries()]
 			.map(([colour,bvh],index,arr) =>
 			{
 				const sdf = bvh.ToSDF(width, height, viewbox);
 				
-				console.timeLog("ColouredLayersToSDFs",`Finished SDF ${index + 1}/${arr.length}`);
+				console.timeLog("ColouredLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
 
 				return [colour, sdf];
 			})
 		);
 	}
 
-	console.timeEnd("ColouredLayersToSDFs");
+	console.timeEnd("ColouredLayersToDistances");
 
-	return sdfs;
+	return dists;
 }
 
 function LayersCalculateVectors(layers)
@@ -1265,8 +1357,8 @@ function LayersCalculateVectors(layers)
 	return layers;
 }
 
-function SDFsToImage(
-		sdfs,
+function DistancesToSDFImage(
+		dists,
 		width,
 		height,
 		min,
@@ -1279,7 +1371,7 @@ function SDFsToImage(
 	for (let i = 0; i < width * height * 4; i++)
 		data.push(COLOUR_MAX_VALUE);
 
-	[...sdfs.entries()].forEach(([colour,rows]) => {
+	[...dists.entries()].forEach(([colour,rows]) => {
 		if (colour == UNKNOWN_COLOUR)
 			return;
 
@@ -1302,6 +1394,144 @@ function SDFsToImage(
 	});
 
 	return data;
+}
+
+function DistancesToColourImage(
+	dists,
+	data,
+	width,
+	height
+)
+{
+	function FromGamma(dists,colour,row,col)
+	{
+		return dists.get(colour)[row][col]
+			.layer.paint.GetColour(sample)
+			// Radial gradients may produce undefined colours
+			?? SDF_COLOUR_INVALID_COLOUR;
+	}
+
+	function FromLinear(dists,colour,row,col)
+	{
+		return dists.get(colour)[row][col]
+			.layer.paint.GetColour(sample).FromLinear()
+			// Radial gradients may produce undefined colours
+			?? SDF_COLOUR_INVALID_COLOUR;
+	}
+
+	const ColourFromDists = COLOUR_LINEAR
+		? FromLinear
+		: FromGamma;
+
+	const data_out = [];
+	const sample = new Point()
+
+	for (let row = 0, i = 0; row < height; row++)
+	{
+		sample.Y = ((row + 0.5) / height * viewbox.h + viewbox.y) * WORKING_SCALE / svg_size;
+		let colour_out;
+		for (let col = 0; col < width;
+			col++,
+			i += 4,
+			data_out.push(Math.round(colour_out.r * COLOUR_MAX_VALUE)),
+			data_out.push(Math.round(colour_out.g * COLOUR_MAX_VALUE)),
+			data_out.push(Math.round(colour_out.b * COLOUR_MAX_VALUE)),
+			data_out.push(Math.round(colour_out.a * COLOUR_MAX_VALUE))
+		)
+		{
+			sample.X = ((col + 0.5) / width * viewbox.w + viewbox.x) * WORKING_SCALE / svg_size;
+
+			const r = data[i+0];
+			const g = data[i+1];
+			const b = data[i+2];
+			const a = data[i+3];
+
+			const min = Math.min(r,g,b,a)
+
+			const min_channels = [
+				[r,COLOUR1_COLOUR],
+				[g,COLOUR2_COLOUR],
+				[b,COLOUR3_COLOUR],
+				[a,COLOUR4_COLOUR]
+			].filter(([v,c]) => dists.has(c) && v == min)
+			.map(([v,c]) => c);
+
+			if (min_channels.length == 1)
+			{
+				colour_out = ColourFromDists(
+					dists,
+					min_channels[0],
+					row,
+					col
+				);
+				continue;
+			}
+			
+			if (COLOUR_BLEED_MODE == BLEED.MARK)
+			{
+				colour_out = COLOUR_BLEED_COLOUR;
+				continue;
+			}
+			
+			if (COLOUR_BLEED_MODE == BLEED.AVERAGE)
+			{
+				colour_out = new RGB(0,0,0,0);
+
+				min_channels
+				.forEach(colour => {
+					let sample_colour = ColourFromDists(
+						dists,
+						colour,
+						row,
+						col
+					);
+
+					if (COLOUR_LINEAR)
+						sample_colour = sample_colour.ToLinear();
+
+					colour_out.r += sample_colour.r;
+					colour_out.g += sample_colour.g;
+					colour_out.b += sample_colour.b;
+					colour_out.a += sample_colour.a;
+				});
+
+				colour_out.r /= min_channels.length;
+				colour_out.g /= min_channels.length;
+				colour_out.b /= min_channels.length;
+				colour_out.a /= min_channels.length;
+
+				if (COLOUR_LINEAR)
+					colour_out = colour_out.FromLinear();
+
+				continue;
+			}
+
+			let min_obj = dists.get(min_channels[0])[row][col];
+			let min_dist = min_obj.euclidean_signed;
+
+			min_channels
+			.slice(1)
+			.forEach(colour => {
+				const obj = dists.get(colour)[row][col];
+				const dist = obj.euclidean_signed;
+
+				if (dist > min_dist)
+					return;
+
+				min_obj = obj;
+				min_dist = dist;
+			});
+
+			colour_out = min_obj.layer.paint.GetColour(sample);
+
+			if (COLOUR_LINEAR && colour_out)
+				colour_out = colour_out.FromLinear();
+
+			colour_out ??= SDF_COLOUR_INVALID_COLOUR;
+		}
+	}
+
+	return data_out;
 }
 
 function SaturateSDFImage(data)
@@ -1357,6 +1587,12 @@ const SETTINGS = document.getElementById("rsdf-settings");
 const OUTPUT_CANVAS = document.getElementById("output-canvas");
 const FALSECOLOUR_CANVAS = document.getElementById("falsecolour-canvas");
 const SATURATED_CANVAS = document.getElementById("saturated-canvas");
+const COLOUR_CANVAS = document.getElementById("colour-canvas");
+
+const CANVAS_CTX = OUTPUT_CANVAS.getContext("2d");
+const FALSECOLOUR_CTX = FALSECOLOUR_CANVAS.getContext("2d");
+const SATURATED_CTX = SATURATED_CANVAS.getContext("2d");
+const COLOUR_CTX = COLOUR_CANVAS.getContext("2d");
 
 const NO_FILE_TEXT = "No file selected (0 bytes)";
 SVG_NAME.textContent = NO_FILE_TEXT;
@@ -1372,10 +1608,7 @@ let sdf_height = 0;
 let sdf_img = [];
 let falsecolour_img = [];
 let saturated_img = [];
-
-const CANVAS_CTX = OUTPUT_CANVAS.getContext("2d");
-const FALSECOLOUR_CTX = FALSECOLOUR_CANVAS.getContext("2d");
-const SATURATED_CTX = SATURATED_CANVAS.getContext("2d");
+let colour_img = [];
 
 UPLOAD_INPUT.addEventListener("change", UploadSVG);
 BUTTON_CONVERT.addEventListener("click", UpdateLayers);
@@ -1391,6 +1624,7 @@ function UploadSVG(e)
 	OUTPUT_CANVAS.style.display = "none";
 	SATURATED_CANVAS.style.display = "none";
 	FALSECOLOUR_CANVAS.style.display = "none;"
+	COLOUR_CANVAS.style.display = "none";
 	layers = undefined;
 
 	let file = e.target.files[0];
@@ -1459,10 +1693,10 @@ function UpdateLayers(e)
 	if (!layers)
 	{
 		const graphics = SVGExtractGraphics(svg_input);
-		layers = GraphicsToLayers(graphics);
+		layers = GraphicsToLayers(graphics, svg_input);
 		// TODO: Add transparency step, intersecting lower layers and setting fills to stacks of blends
 		layers = ClipOccludedLayers(layers);
-		layers = FuseLayerColours(layers);
+		layers = FuseLayerPaints(layers);
 		layers = SeparateLayerPolys(layers);
 		layers = CullSmallLayers(layers);
 		ConnectLayers(layers);
@@ -1571,14 +1805,14 @@ function RenderSDF()
 	else
 		sdf_width = Math.round(SDF_SIZE * viewbox.w / viewbox.h);
 
-	let sdf_min = -SDF_INNER_RANGE * WORKING_SCALE / SDF_SIZE;
-	let sdf_max = SDF_OUTER_RANGE * WORKING_SCALE / SDF_SIZE;
+	const sdf_min = -SDF_INNER_RANGE * WORKING_SCALE / SDF_SIZE;
+	const sdf_max = SDF_OUTER_RANGE * WORKING_SCALE / SDF_SIZE;
 
 	// Todo: Move processing to a web worker so the page does not lock up, and progress can be displayed
-	let sdfs = ColouredLayersToSDFs(layers, sdf_width, sdf_height, viewbox);
+	const dists = ColouredLayersToDistances(layers, sdf_width, sdf_height, viewbox);
 
-	sdf_img = SDFsToImage(
-		sdfs,
+	sdf_img = DistancesToSDFImage(
+		dists,
 		sdf_width,
 		sdf_height,
 		sdf_min,
@@ -1630,6 +1864,26 @@ function RenderSDF()
 		SATURATED_CTX.putImageData(saturated_img_data,0,0);
 	}
 
+	if (SDF_COLOUR)
+	{
+		COLOUR_CANVAS.style.display = "";
+		COLOUR_CANVAS.width = sdf_width;
+		COLOUR_CANVAS.height = sdf_height;
+
+		const colour_img_data = COLOUR_CTX.getImageData(0,0,sdf_width,sdf_height);
+		const colour_data = colour_img_data.data;
+
+		colour_img = DistancesToColourImage(
+			dists,
+			sdf_img,
+			sdf_width,
+			sdf_height
+		);
+		
+		colour_img.forEach((v,i) => colour_data[i] = v);
+		COLOUR_CTX.putImageData(colour_img_data,0,0);
+	}
+
 	OUTPUT_CANVAS.style.display = "";
 	OUTPUT_CANVAS.width = sdf_width;
 	OUTPUT_CANVAS.height = sdf_height;
@@ -1643,7 +1897,6 @@ function RenderSDF()
 	sdf_img.forEach((v,i) => data[i] = v);
 	CANVAS_CTX.putImageData(img_data,0,0);
 
-	// TODO: Render corresponding colour texture for the RSDF
 	// TODO: Create combined preview using RSDF sampling in a shader
 }
 
@@ -1716,5 +1969,13 @@ function SaveSDFs(e)
 			sdf_width,
 			sdf_height,
 			filename_prefix + "Saturated" + filename_suffix
+		);
+
+	if (COLOUR_CANVAS.style.display != "none")
+		SaveCanvas(
+			colour_img,
+			sdf_width,
+			sdf_height,
+			filename_prefix + "Colour" + filename_suffix
 		);
 }

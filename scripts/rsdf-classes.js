@@ -669,3 +669,640 @@ class BVHLeaf extends BVH
 		this.edges = edges;
 	}
 }
+
+class RGB
+{
+	constructor(r,g,b,a=1)
+	{
+		this.r = r;
+		this.g = g;
+		this.b = b;
+		this.a = a;
+	}
+
+	static to_lrgb = culori.converter("lrgb");
+	static to_srgb = culori.converter("rgb");
+
+	static FromString(s, linear = false)
+	{
+		const c = (linear ? this.to_lrgb : this.to_srgb)(s);
+
+		if (c === undefined)
+			return undefined;
+
+		return new RGB(
+			c.r ?? 0,
+			c.g ?? 0,
+			c.b ?? 0,
+			c.alpha ?? 1
+		);
+	}
+	
+	FromLinear()
+	{
+		const c = RGB.to_srgb(
+			{
+				mode: "lrgb",
+				r: this.r,
+				g: this.g,
+				b: this.b,
+				alpha: this.a
+			}
+		);
+
+		if (c === undefined)
+			return undefined;
+
+		return new RGB(
+			c.r ?? 0,
+			c.g ?? 0,
+			c.b ?? 0,
+			c.alpha ?? 1
+		);
+	}
+
+	ToLinear()
+	{
+		const c = RGB.to_lrgb(
+			{
+				mode: "rgb",
+				r: this.r,
+				g: this.g,
+				b: this.b,
+				alpha: this.a
+			}
+		);
+
+		if (c === undefined)
+			return undefined;
+
+		return new RGB(
+			c.r ?? 0,
+			c.g ?? 0,
+			c.b ?? 0,
+			c.alpha ?? 1
+		);
+	}
+
+	static Equal(a, b)
+	{
+		return (a == undefined && b == undefined) || 
+		(
+			a != undefined && b != undefined &&
+			a.r == b.r &&
+			a.g == b.g &&
+			a.b == b.b &&
+			a.a == b.a
+		);
+	}
+
+	static Lerp(mix, min, max)
+	{
+		if (RGB.Equal(min, max))
+			return max;
+
+		if (mix == 0) return min;
+		if (mix == 1) return max;
+
+		return new RGB(
+			Lerp(mix, min.r, max.r),
+			Lerp(mix, min.g, max.g),
+			Lerp(mix, min.b, max.b),
+			Lerp(mix, min.a, max.a)
+		);
+	}
+}
+
+class Paint
+{
+	static FromString(text, bounds, opacity, root, linear = false)
+	{
+		const URL_REGEX = /^url\((['"]?)\#(.+)\1\)$/;
+
+		if (!text)
+			return new PaintConstant(new RGB(0,0,0,opacity));
+		
+		const colour = RGB.FromString(text, linear);
+
+		if (colour !== undefined)
+			return new PaintConstant(colour, opacity);
+
+		if (!URL_REGEX.test(text))
+			throw new Error(`Paint.FromString: Expected colour, got '${text}'.`);
+
+		const paint_element = root.getElementById(text.match(URL_REGEX)[2]);
+
+		if (paint_element === undefined)
+			throw new Error(`Paint.FromString: Could not find element with id in ${text}.`);
+
+		const tag = paint_element.tagName.toUpperCase();
+ 
+		if (tag == "LINEARGRADIENT")
+			return PaintGradientLinear.FromLinearElement(paint_element, bounds, opacity, linear);
+
+		if (tag == "RADIALGRADIENT")
+			return PaintGradientRadial.FromRadialElement(paint_element, bounds, opacity, linear);
+
+		throw new Error(`Paint.FromString: Attempted to retrieve gradient from URL, got '${paint_element.tagName}' element.`);
+	}
+
+	static Equal(a,b)
+	{
+		if (a.constructor !== b.constructor)
+			return false;
+
+		return a.constructor.Equal(a,b);
+	}
+}
+
+class PaintConstant extends Paint
+{
+	constructor(colour, opacity = 1)
+	{
+		super();
+		this.colour = colour;
+		if (colour)
+			this.colour.a *= opacity;
+	}
+
+	static Equal(a,b)
+	{
+		return RGB.Equal(a.colour, b.colour);
+	}
+
+	GetColour(point)
+	{
+		return this.colour;
+	}
+
+	get opaque()
+	{
+		return this.colour?.a ?? 0 == 1;
+	}
+
+}
+
+class GradientStop
+{
+	constructor(offset, colour)
+	{
+		this.offset = offset; // Expected to be based on 0-1
+		this.colour = colour;
+	}
+
+	static StopsFromElement(element, length, linear = false)
+	{
+		return [...element
+		.getElementsByTagName("stop")]
+		.map(stop => {
+			let colour = RGB.FromString(
+				GetAttributeOrStyle(stop, "stop-color")
+				?? "black",
+				linear
+			) ?? new RGB(0,0,0);
+
+			const _opacity = GetAttributeOrStyle(stop, "stop-opacity");
+			const opacity = _opacity != undefined && !Number.isNaN(_opacity)
+				? Clamp01(Number(_opacity))
+				: 1;
+
+			colour.a *= opacity;
+			
+			const _offset = stop.offset;
+			const offset =
+			_offset.constructor === SVGAnimatedNumber ||
+			_offset.constructor === SVGNumber
+				? stop.getAttribute("offset").slice(-1) == "%"
+					? _offset.baseVal
+					: _offset.baseVal / length
+				: 0;
+
+			return new GradientStop(
+				offset,
+				colour
+			);
+		});
+	}
+
+	static Equal(a,b)
+	{
+		return a.offset == b.offset &&
+			RGB.Equal(a.colour,b.colour);
+	}
+
+	static GetColour(stops, offset, spread)
+	{
+		if (spread == Gradient.SPREAD.PAD)
+		{
+			offset = Clamp01(offset);
+		}
+		else
+		{
+			// Reflect essentially has double the range of repeat
+			const range = spread == Gradient.SPREAD.REFLECT ? 2 : 1;
+
+			let _offset = offset % range;
+
+			// Deal with negative modulo dividend
+			if (offset < 0)
+				_offset = (_offset + range) % range;
+
+			if (spread == Gradient.SPREAD.REFLECT && _offset > 1)
+				_offset = 2 - _offset;
+
+			offset = _offset;
+		}
+		
+		if (offset <= stops[0].offset)
+			return stops[0].colour;
+		if (offset >= stops[stops.length - 1].offset)
+			return stops[stops.length - 1].colour;
+
+		let i = 0;
+		for (; i < stops.length - 2; i++)
+		{
+			if (offset == stops[i + 1].offset)
+				return stops[i + 1].colour;
+			if (offset < stops[i + 1].offset)
+				break;
+		}
+
+		const a = stops[i];
+		const b = stops[i + 1];
+		const mix = (offset - a.offset) / (b.offset - a.offset);
+
+		return RGB.Lerp(mix, a.colour, b.colour);
+	}
+}
+
+class Gradient extends Paint
+{
+	constructor(stops, spread, opacity)
+	{
+		this.stops = stops.sort((a,b) => a.offset - b.offset);
+		this.spread = spread;
+
+		this.stops.forEach(stop => stop.colour.a *= opacity);
+	}
+
+	static SPREAD = {
+		PAD: 0,
+		REFLECT: 1,
+		REPEAT: 2
+	};
+
+	static SPREAD_MAP = {
+		pad: Gradient.SPREAD.PAD,
+		reflect: Gradient.SPREAD.REFLECT,
+		repeat: Gradient.SPREAD.REPEAT,
+	};
+
+	get opaque()
+	{
+		return this.stops.every(stop => stop.colour.a == 1);
+	}
+}
+
+class PaintGradientLinear extends Gradient
+{
+	constructor(
+		enda,
+		endb,
+		stops,
+		spread,
+		opacity
+	)
+	{
+		if (stops.length == 0)
+			return new PaintConstant(undefined, opacity);
+
+		if (opacity == 0 || stops.every(stop => stop.a == 0))
+			return new PaintConstant(new RGB(0,0,0,0));
+
+		if (stops.length == 1 ||
+			stops.slice(1)
+			.every(stop => RGB.Equal(stops[0].colour, stop.colour)))
+			return new PaintConstant(stops[0].colour, opacity);
+
+		super(stops, spread, opacity);
+
+		this.enda = enda;
+		this.endb = endb;
+		this.distance = Point.Distance(enda,endb);
+		this.tangent = endb.Subtract(enda).ScaleInv(this.distance);
+	}
+
+	static FromLinearElement(element, bounds, opacity, linear)
+	{
+		const _x1 = element.x1?.baseVal;
+		const _y1 = element.y1?.baseVal;
+		const _x2 = element.x2?.baseVal;
+		const _y2 = element.y2?.baseVal;
+
+		const x1 = _x1 !== undefined
+			? _x1.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
+				? Lerp(_x1.valueInSpecifiedUnits, bounds.min.X, bounds.max.X)
+				: _x1.value * WORKING_SCALE
+			: bounds.min.X;
+
+		const x2 = _x2 !== undefined
+			? _x2.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
+				? Lerp(_x2.valueInSpecifiedUnits, bounds.min.X, bounds.max.X)
+				: _x2.value * WORKING_SCALE
+			: bounds.max.X;
+
+		const y1 = _y1 !== undefined
+			? _y1.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
+				? Lerp(_y1.valueInSpecifiedUnits, bounds.min.Y, bounds.max.Y)
+				: _y1.value * WORKING_SCALE
+			: bounds.min.Y;
+
+		const y2 = _y2 !== undefined
+			? _y2.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
+				? Lerp(_y2.valueInSpecifiedUnits, bounds.min.Y, bounds.max.Y)
+				: _y2.value * WORKING_SCALE
+			: bounds.min.Y;
+
+		const _spread = element.getAttribute("spreadMethod");
+		const spread = _spread in Gradient.SPREAD_MAP
+			? Gradient.SPREAD_MAP[_spread]
+			: Gradient.SPREAD.PAD;
+
+		const enda = new Point(x1,y1);
+		const endb = new Point(x2,y2);
+
+		const stops = GradientStop.StopsFromElement(
+			element,
+			Point.Distance(enda,endb),
+			linear
+		);
+
+		return new PaintGradientLinear(
+			enda,
+			endb,
+			stops,
+			spread,
+			opacity
+		);
+	}
+
+	static Equal(a,b)
+	{
+		return a.spread == b.spread &&
+			a.stops.length == b.stops.length &&
+			(
+				(
+					Point.Equal(a.enda, b.enda) &&
+					Point.Equal(a.endb, b.endb) &&
+					a.stops.every((stop, i) => GradientStop.Equal(stop, b.stops[i]))
+				) || (
+					Point.Equal(a.enda, b.endb) &&
+					Point.Equal(a.endb, b.enda) &&
+					a.stops.every((stop, i) => 
+						stop.offset == 1 - b.stops.at(-i - 1).offset &&
+						RGB.Equal(stop.colour, b.stops.at(-i - 1).colour)
+					)
+				)
+			);
+	}
+
+	GetColour(point)
+	{
+		const offset = point
+			.Subtract(this.enda)
+			.DotProduct(this.tangent) / this.distance;
+
+		return GradientStop.GetColour(this.stops, offset, this.spread);
+	}
+}
+
+// A radial gradient, based on an outer and inner circle with stops.
+class PaintGradientRadial extends Gradient
+{
+	constructor(
+		center,
+		radius,
+		focus,
+		focus_radius,
+		stops,
+		spread,
+		opacity
+	)
+	{
+		if (Point.Equal(focus, center))
+			return new PaintGradientRadialSimple(
+				center,
+				radius,
+				focus_radius,
+				stops,
+				spread,
+				opacity
+			);
+
+		if (stops.length == 0)
+			return new PaintConstant(undefined,opacity);
+		
+		if (opacity == 0 || stops.every(stop => stop.colour.a == 0))
+			return new PaintConstant(new RGB(0,0,0,0));
+
+		// All stops are the same colour
+		if (stops.length == 1 ||
+			stops.slice(1)
+			.every(stop =>
+				RGB.Equal(stops[0].colour, stop.colour)
+			))
+			return new PaintConstant(stops[0].colour, opacity);
+			
+		super(stops, spread, opacity);
+
+		this.center = center;
+		this.radius = radius;
+		this.focus = focus;
+		this.focus_radius = focus_radius;
+
+		// Using this point, you can take the proportion between it
+		// and the outer circle to sample the gradient.
+		this.cone_tip = focus
+		.Subtract(center)
+		.ScaleInv(
+			1 - focus_radius / radius
+		).Add(center);
+
+		this.pointed = Point.Distance(center, this.cone_tip)
+			>= radius - Number.EPSILON;
+		this.tip_to_center = this.center.Subtract(this.cone_tip);
+	}
+
+	static FromRadialElement(element, bounds, opacity, linear)
+	{
+		const max_radius = Math.min(
+			bounds.max.X - bounds.min.X,
+			bounds.max.Y - bounds.min.Y
+		) * 0.5;
+		const _cx = element.cx?.baseVal;
+		const _cy = element.cy?.baseVal;
+		const _r = element.r?.baseVal;
+		const _fx = element.fx?.baseVal;
+		const _fy = element.fy?.baseVal;
+		const _fr = element.fr?.baseVal;
+
+		const cx = _cx !== undefined
+			? _cx.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
+				? Lerp(_cx.valueInSpecifiedUnits, bounds.min.X, bounds.max.X)
+				: _cx.value * WORKING_SCALE
+			: (bounds.min.X + bounds.max.X) * 0.5;
+
+		const cy = _cy !== undefined
+			? _cy.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
+				? Lerp(_cy.valueInSpecifiedUnits, bounds.min.Y, bounds.max.Y)
+				: _cy.value * WORKING_SCALE
+			: (bounds.min.Y + bounds.max.Y) * 0.5;
+
+		const r = _r !== undefined
+			? _r.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
+				? _r.valueInSpecifiedUnits * max_radius
+				: _r.value * WORKING_SCALE
+			: max_radius;
+
+		const fx = _fx !== undefined
+			? _fx.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
+				? Lerp(_fx.valueInSpecifiedUnits, bounds.min.X, bounds.max.X)
+				: _fx.value * WORKING_SCALE
+			: cx;
+
+		const fy = _fy !== undefined
+			? _fy.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
+				? Lerp(_fy.valueInSpecifiedUnits, bounds.min.Y, bounds.max.Y)
+				: _fy.value * WORKING_SCALE
+			: cy;
+
+		const fr = _fr !== undefined
+			? _fr.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
+				? _fr.valueInSpecifiedUnits * max_radius
+				: _fr.value * WORKING_SCALE
+			: 0;
+
+		const _spread = element.getAttribute("spreadMethod");
+		const spread = _spread in Gradient.SPREAD_MAP
+			? Gradient.SPREAD_MAP[_spread]
+			: Gradient.SPREAD.PAD;
+
+		const stops = GradientStop.StopsFromElement(element, r-fr, linear);
+
+		return new PaintGradientRadial(
+			new Point(cx,cy),
+			r,
+			new Point(fx,fy),
+			fr,
+			stops,
+			spread,
+			opacity
+		);
+	}
+	
+	static Equal(a,b)
+	{
+		return a.focus_radius == b.focus_radius &&
+			a.radius == b.radius &&
+			Point.Equal(a.center, b.center) &&
+			Point.Equal(a.focus, b.focus) &&
+			a.spread == b.spread &&
+			a.stops.length == b.stops.length &&
+			a.stops.every((stop, i) => GradientStop.Equal(stop,b.stops[i]));
+	}
+
+	GetColour(point)
+	{
+		const tip_to_point = point.Subtract(this.cone_tip);
+
+		if (this.pointed && 
+			tip_to_point.DotProduct(this.tip_to_center) <= 0)
+			return undefined;
+
+		// Cast a ray from the cone tip, towards the point, and intersect the outer circle
+		const ray_dir = tip_to_point.Normalised();
+		const ray_normal = NormalFromTangent(ray_dir);
+		const ray_rel = point.Subtract(this.center);
+
+		// The closest point on the ray to the circle (tangent to circle, perpendicular to ray direction)
+		const closest_dist = ray_normal.DotProduct(ray_rel);
+
+		// Ray does not pass through circle
+		if (closest_dist * closest_dist > this.radius * this.radius)
+			return undefined;
+		
+		const closest_to_outer_distance = Math.sqrt(this.radius * this.radius - closest_dist * closest_dist);
+		const closest = ray_normal
+			.Scale(closest_dist)
+			.Add(this.center);
+		const outer = ray_dir
+			.Scale(closest_to_outer_distance)
+			.Add(closest);
+		const tip_to_outer = outer
+			.Subtract(this.cone_tip);
+
+		const offset = (
+			Math.sqrt(tip_to_point.LengthSqr() / tip_to_outer.LengthSqr()) * this.radius -
+			this.focus_radius
+		) / (this.radius - this.focus_radius);
+
+		return GradientStop.GetColour(this.stops, offset, this.spread);
+	}
+	
+	get opaque()
+	{
+		return !this.pointed
+			&& this.stops.every(stop => stop.colour.a == 1);
+	}
+}
+
+// A trivial gradient case where the focal point is also the center.
+class PaintGradientRadialSimple extends Gradient
+{
+	constructor(
+		center,
+		outer_radius,
+		inner_radius,
+		stops,
+		spread,
+		opacity
+	)
+	{
+		if (stops.length == 0)
+			return new PaintConstant(undefined, opacity);
+		
+		if (opacity == 0 || stops.every(stop => stop.a == 0))
+			return new PaintConstant(new RGB(0,0,0,0));
+
+		if (stops.length == 1 ||
+			stops.slice(1)
+			.every(stop => RGB.Equal(stops[0].colour, stop.colour)))
+			return new PaintConstant(stops[0].colour, opacity);
+
+		super(stops, spread, opacity);
+
+		this.center = center;
+		this.outer_radius = outer_radius;
+		this.inner_radius = inner_radius;
+
+		this.radius_range = outer_radius - inner_radius;
+	}
+
+	GetColour(point)
+	{
+		const offset = (Point.Distance(point,this.center) - this.inner_radius)
+			/ this.radius_range;
+
+		return GradientStop.GetColour(this.stops, offset, this.spread);
+	}
+	
+	static Equal(a,b)
+	{
+		return a.inner_radius == b.inner_radius &&
+			a.outer_radius == b.outer_radius &&
+			Point.Equal(a.center, b.center) &&
+			a.spread == b.spread &&
+			a.stops.length == b.stops.length &&
+			a.stops.every((stop, i) => GradientStop.Equal(stop,b.stops[i]));
+	}
+}
