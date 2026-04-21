@@ -832,7 +832,7 @@ function GetSafeLayerColours(layer)
 	if (layer_colours.size == 0 || unknown_connections.size == 0)
 		return layer_colours;
 
-	let colours = new Set();
+	let connection_colours = new Set();
 
 	// Block colours if using it would cause a clique to have
 	// less colours available than there are nodes.
@@ -862,17 +862,17 @@ function GetSafeLayerColours(layer)
 
 				// 4-clique neighbours (maximum) with only three colours
 				if (c123_colours.size < 4)
-					colours = colours.union(c123_colours);
+					connection_colours = connection_colours.union(c123_colours);
 			});
 
 			// 3-clique neighbours with only two colours
 			if (c12_colours.size < 3)
-				colours = colours.union(c12_colours);
+				connection_colours = connection_colours.union(c12_colours);
 		});
 
 		// 2-clique neighbour with only one colour
 		if (c1_colours.size < 2)
-			colours = colours.union(c1_colours);
+			connection_colours = connection_colours.union(c1_colours);
 	});
 
 	// Return valid colours without those that break cliques
