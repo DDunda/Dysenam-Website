@@ -832,13 +832,73 @@ function ConnectLayers(layers)
 }
 
 // Finds colours that are not immediately blocked by neighbours
-function GetPossibleLayerColours(layer)
+function GetValidLayerColours(layer)
 {
 	return new Set(
 		[...layer.neighbour_colours]
 		.filter(([k,v]) => k != UNKNOWN_COLOUR && v == 0)
 		.map(([k,v]) => k)
 	);
+}
+
+// Finds colours that are not immediately blocked, and do not deplete
+// its cliques of possible colours.
+function GetSafeLayerColours(layer)
+{
+	const layer_colours = GetValidLayerColours(layer);
+
+	// Connections of layer
+	const unknown_connections = new Set([...layer.connections]
+	.filter(connection => connection.graph_colour != UNKNOWN_COLOUR));
+
+	if (layer_colours.size == 0 || unknown_connections.size == 0)
+		return layer_colours;
+
+	let colours = new Set();
+
+	// Block colours if using it would cause a clique to have
+	// less colours available than there are nodes.
+	[...unknown_connections]
+	.forEach((c1, i, arr1) => {
+		const c1_colours = GetValidLayerColours(c1);
+
+		// Connections of layer AND c1
+		const possible_c2 = new Set(
+			arr1.slice(i + 1)
+		).intersection(c1.connections);			
+
+		[...possible_c2]
+		.forEach((c2, j, arr2) => {
+			const c2_colours = GetValidLayerColours(c2);
+			const c12_colours = c1_colours.union(c2_colours);
+
+			// Connections of layer AND c1 AND c2
+			const possible_c3 = new Set(
+				arr2.slice(j + 1)
+			).intersection(c2.connections);
+
+			[...possible_c3]
+			.forEach((c3, k, arr3) => {
+				const c3_colours = GetValidLayerColours(c3);
+				const c123_colours = c12_colours.union(c3_colours);
+
+				// 4-clique neighbours (maximum) with only three colours
+				if (c123_colours.size < 4)
+					colours = colours.union(c123_colours);
+			});
+
+			// 3-clique neighbours with only two colours
+			if (c12_colours.size < 3)
+				colours = colours.union(c12_colours);
+		});
+
+		// 2-clique neighbour with only one colour
+		if (c1_colours.size < 2)
+			colours = colours.union(c1_colours);
+	});
+
+	// Return valid colours without those that break cliques
+	return layer_colours.difference(connection_colours);
 }
 
 function MarkLayerColour(layer, colour)
@@ -884,86 +944,120 @@ function SetupGraph(layers)
 	});
 }
 
+// Saves the state of a graph with mappings from layers to colours
+function GetGraphState(layers)
+{
+	return new Map(
+		layers.map(layer =>
+			[layer, layer.graph_colour]
+		)
+	);
+}
+
+// Resets a graph using a map from layers to original colours
+function ResetGraphState(initial_state)
+{
+	[...initial_state.entries()]
+	.forEach(([layer,colour]) =>
+		MarkLayerColour(layer, colour)
+	);
+}
+
 // Attempts to colour a graph. To exhaust possibilities, this recurses
 // when a uncertain decision is made. Returns true if coloured, false if not,
 // and resets the graph when a colouring was not possible.
-function GraphColourLayers(layers)
+function ColourGraph(layers)
 {
 	if (layers.length == 0)
-		return;
+		return true;
 
+	const initial_state = GetGraphState(layers);
 	const input = new Set(layers);
 	const trivial_groups = [];
+	let input_arr = [...input];
 
-	do
+	for (;;)
 	{
+		const trivial = new Set();
+		
 		// TODO: modify trivial extraction, and forced placement,
 		// to only check dirty nodes.
 		for (let i = 0; i < input.size; i++)
 		{
-			let layer = [...input][i];
-			let possible_colours = GetPossibleLayerColours(layer);
-
-			if (possible_colours.size > 1)
-				continue;
+			const layer = input_arr[i];
+			const possible_colours = GetSafeLayerColours(layer);
 
 			if (possible_colours.size == 0)
-				throw new Error("Cannot colour graph!");				
+			{
+				ResetGraphState(initial_state);
+				return false;
+			}
+			else if (possible_colours.size == 1)
+			{
+				MarkLayerColour(layer,[...possible_colours][0]);
+				
+				trivial.delete(layer);
+				input.delete(layer);
+				input_arr = [...input];
+				i = -1;
+				continue;
+			}
 
-			MarkLayerColour(layer,[...possible_colours][0]);
-			input.delete(layer);
-			i = -1;
+			const unknown_neighbours = [...(
+				layer.connections.intersection(input)
+			)].filter(connection =>
+				connection.graph_colour == UNKNOWN_COLOUR
+			);
+
+			if (possible_colours.size <= unknown_neighbours.length)
+				continue;
+			
+			trivial.add(layer);
 		}
 
-		if (input.size == 0)
+		if (trivial.size == 0)
 			break;
 
-		const trivial = new Set(
-			[...input]
-			.filter(layer => {
-				const possible_colours = GetPossibleLayerColours(layer)
-				.size;
+		trivial_groups.push(trivial);
 
-				const unknown_neighbours = [...(
-					layer.connections.intersection(input)
-				)].filter(connection =>
-					connection.graph_colour == UNKNOWN_COLOUR
-				).length;
+		[...trivial].forEach(layer => input.delete(layer));
+		input_arr = [...input];
+	}
 
-				return possible_colours > unknown_neighbours;
-			})
-		);
-
-		if (trivial.size > 0) 
-		{
-			trivial_groups.push(trivial);
-			input = input.difference(trivial);
-			continue;
-		}
-
+	if (input.size != 0)
+	{
 		// TODO: Replace sort by neighbour count with a sort by odd cycle count
-		const most_connected = [...input]
+		const most_connected = input_arr
 		.slice(1)
 		.reduce((previous,current) =>
 			current.connections.size > previous.connections.size
 				? current
 				: previous,
-			[...input][0]
-		);
-
-		// TODO: Add more sophisticated code for cases where naive placement fails
-		// (Create a solver function that checks if a result is possible)
-
-		MarkLayerColour(
-			most_connected,
-			[...GetPossibleLayerColours(
-				most_connected
-			)][0]
+			input_arr[0]
 		);
 
 		input.delete(most_connected);
+		input_arr = [...input];
+
+		const allowed_colours = [...GetSafeLayerColours(
+			most_connected
+		)];
+
+		do
+		{
+			if (allowed_colours.length == 0)
+			{
+				ResetGraphState(initial_state);
+				return false;
+			}
+
+			MarkLayerColour(
+				most_connected,
+				allowed_colours.pop()
+			);
+		}
+		while (!ColourGraph(input_arr));
 	}
-	while (input.size > 0);
 
 	// TODO: Add code to maximise distance between repeated colours
 	trivial_groups
@@ -974,10 +1068,11 @@ function GraphColourLayers(layers)
 			a.neighbour_colours.get(UNKNOWN_COLOUR) -
 			b.neighbour_colours.get(UNKNOWN_COLOUR)
 		)
-		.forEach(layer => { 
-			const colours = [...GetPossibleLayerColours(
+		.forEach(layer => {
+			const colours = [...GetValidLayerColours(
 				layer
 			)];
+
 			MarkLayerColour(
 				layer,
 				// TODO: Replace random selection with
@@ -986,6 +1081,8 @@ function GraphColourLayers(layers)
 			);
 		})
 	);
+	
+	return true;
 }
 
 // Signed distance to path as [Point...]
@@ -1401,7 +1498,14 @@ function UpdateLayers(e)
 		);
 	}
 
-	GraphColourLayers(layers);
+	if (!ColourGraph(layers))
+	{
+		DisplayLayers();
+		layers = undefined;
+		console.error("Could not colour layers!");
+		return;
+	}
+
 	DisplayLayers();
 
 	setTimeout(RenderSDF,0);
