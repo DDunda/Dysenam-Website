@@ -628,62 +628,49 @@ function ClipOccludedLayers(layers)
 
 function FuseLayerColours(layers)
 {
-	var colour_groups = {};
+	const colour_groups = new Map();
+	const clipper = new ClipperLib.Clipper();
 
-	layers.forEach(
-		layer =>
-		{
-			if (!(layer.fill in colour_groups))
-			{
-				colour_groups[layer.fill] = [];
-			}
-			colour_groups[layer.fill].push(layer.poly);
-		}
-	);
+	layers.forEach(layer => {
+		if (!colour_groups.has(layer.fill))
+			colour_groups.set(layer.fill, []);
+		
+		colour_groups.get(layer.fill)
+		.push(layer.poly);
+	});
 	
-	return Object.entries(colour_groups).map(
-		([colour,polys]) =>
-		{
-			if (polys.length < 2)
-			{
-				return {
-					poly: polys[0],
-					fill: colour
-				};
-			}
-
-			let subj_poly = polys[0];
-
-			let clipper = new ClipperLib.Clipper();
-
-			for (let i = 1; i < polys.length; i++)
-			{
-				let clip_poly = polys[i];
-
-				let solution = new ClipperLib.Paths();
-
-				clipper.Clear();
-				clipper.AddPaths(subj_poly, ClipperLib.PolyType.ptSubject, true);
-				clipper.AddPaths(clip_poly, ClipperLib.PolyType.ptClip, true);
-				clipper.Execute(
-					ClipperLib.ClipType.ctUnion,
-					solution,
-					ClipperLib.PolyFillType.pftNonZero,
-					ClipperLib.PolyFillType.pftNonZero
-				);
-
-				subj_poly = solution;
-			}
-
-			subj_poly = ClipperLib.Clipper.SimplifyPolygons(subj_poly, ClipperLib.PolyFillType.pftNonZero);
-			subj_poly = ClipperLib.Clipper.CleanPolygons(subj_poly, CLEANUP_DELTA * WORKING_SCALE);
-
+	return [...colour_groups.entries()]
+	.map(([colour,polys]) => {
+		if (polys.length < 2)
 			return {
-				poly: subj_poly,
+				poly: polys[0],
 				fill: colour
 			};
-		}
-	).filter(layer => layer.poly.flat(1).length > 0);
+
+		const solution = new ClipperLib.Paths();
+
+		clipper.Clear();
+
+		polys.forEach(poly => 
+			clipper.AddPaths(poly, ClipperLib.PolyType.ptClip, true)
+		);
+
+		clipper.Execute(
+			ClipperLib.ClipType.ctUnion,
+			solution,
+			ClipperLib.PolyFillType.pftNonZero,
+			ClipperLib.PolyFillType.pftNonZero
+		);
+
+		solution = ClipperLib.Clipper.SimplifyPolygons(solution, ClipperLib.PolyFillType.pftNonZero);
+		solution = ClipperLib.Clipper.CleanPolygons(solution, CLEANUP_DELTA * WORKING_SCALE);
+
+		return {
+			poly: solution,
+			fill: colour
+		};
+	})
+	.filter(layer => layer.poly.flat(1).length > 0);
 }
 
 function SeparateLayerPolys(layers)
