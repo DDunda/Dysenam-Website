@@ -695,80 +695,75 @@ function ConnectLayers(layers)
 		layer.connections = new Set()
 	);
 
-	[
-		...layers.reduce(
-			(p1,layer) => layer.poly.reduce(
-				(p2,path) => path.reduce(
-					(p3,v,i) =>
-					{
-						let v1 = new Point(v.X, v.Y);
-						let v2 = path[(i + 1) % path.length];
-						v2 = new Point(v2.X,v2.Y);
+	[...layers.reduce(
+		(planes,layer) => {
+			layer.poly
+			.forEach(path => path
+				.forEach((v,i) => {
+					const _v1 = new Point(v.X, v.Y);
+					const _v2 = path[(i + 1) % path.length];
 
-						if (v2.X < v1.X || (v2.X == v1.X && v2.Y < v1.Y))
-							[v1,v2] = [v2,v1];
-						
-						let tangent_angle = Math.atan2(v2.Y - v1.Y, v2.X - v1.X);
-						tangent_angle = Math.round(
-							tangent_angle * ADJACENCY_ANGLE_STEPS / Math.PI
-						) % ADJACENCY_ANGLE_STEPS;
-						let tangent = new Point(
-							Math.cos(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI),
-							Math.sin(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI)
-						);
+					let v1 = _v1;
+					let v2 = new Point(_v2.X, _v2.Y);
 
-						let minTangent = tangent.DotProduct(v1);
-						let maxTangent = tangent.DotProduct(v2);
+					if (v2.X < v1.X || (v2.X == v1.X && v2.Y < v1.Y))
+						[v1,v2] = [v2,v1];
+					
+					const tangent_angle = Math.round(
+						(Math.atan2(v2.Y - v1.Y, v2.X - v1.X) / Math.PI + 2)
+						* ADJACENCY_ANGLE_STEPS
+					) % ADJACENCY_ANGLE_STEPS;
+					const tangent = new Point(
+						Math.cos(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI),
+						Math.sin(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI)
+					);
 
-						if (maxTangent < minTangent)
-							[minTangent, maxTangent] = [maxTangent, minTangent];
+					const extent1 = tangent.DotProduct(v1);
+					const extent2 = tangent.DotProduct(v2);
 
-						let normal = NormalFromTangent(tangent);
-						let offset = normal.DotProduct(v1.Add(v2)) * .5;
+					const normal = NormalFromTangent(tangent);
+					const offset = normal.DotProduct(v1.Add(v2)) * .5;
 
-						let plane = `${tangent_angle},${Math.round(offset / (ADJACENCY_MAX_DISTANCE * WORKING_SCALE))}`;
+					const plane = `${tangent_angle},${Math.round(offset / (ADJACENCY_MAX_DISTANCE * WORKING_SCALE))}`;
 
-						if (!p3.has(plane))
-							p3.set(plane,[]);
-						
-						p3.get(plane).push({
-							min: minTangent,
-							max: maxTangent,
-							layer: layer
-						});
-						return p3;
-					},
-					p2
-				),
-				p1
-			),
-			new Map()
-		)
-	]
+					const segment = {
+						min: Math.min(extent1, extent2),
+						max: Math.max(extent1, extent2),
+						layer: layer
+					};
+
+					if (!planes.has(plane))
+						planes.set(plane,[]);
+					
+					planes.get(plane).push(segment);
+				})
+			);
+
+			return planes;
+		},
+		new Map()
+	)]
 	.filter(
 		([k,v]) => v.length > 1
 	)
-	.forEach(([k,v]) => 
+	.forEach(([k,v]) => {
+		for (let i = v.length - 1; i >= 1; i--)
 		{
-			for (let i = 0; i < v.length - 1; i++)
+			for (let j = i - 1; j >= 0; j--)
 			{
-				for (let j = i + 1; j < v.length; j++)
-				{
-					if (v[i].max < v[j].min || v[i].min > v[j].max)
-						continue;
-					
-					v[i].layer.connections.add(v[j].layer);
-					v[j].layer.connections.add(v[i].layer);
-				}
+				if (v[i].max < v[j].min || v[i].min > v[j].max)
+					continue;
+				
+				v[i].layer.connections.add(v[j].layer);
+				v[j].layer.connections.add(v[i].layer);
 			}
 		}
-	);
+	});
 	
 	// TODO: Annotate distances between all regions
-	
-	return layers;
 }
 
+// Finds colours that are not immediately blocked by neighbours
 function GetPossibleLayerColours(layer)
 {
 	return new Set(
@@ -783,54 +778,54 @@ function MarkLayerColour(layer, colour)
 	if (layer.graph_colour == colour)
 		return;
 
-	[...layer.connections].forEach(
-		c => {
-			c.neighbour_colours.set(
-				layer.graph_colour,
-				c.neighbour_colours.get(
-					layer.graph_colour
-				 ) - 1
-			);
-			c.neighbour_colours.set(
-				colour,
-				c.neighbour_colours.get(
-					colour
-				 ) + 1
-			);
-		}
-	);
+	[...layer.connections]
+	.forEach(connection => {
+		connection.neighbour_colours.set(
+			layer.graph_colour,
+			connection.neighbour_colours.get(
+				layer.graph_colour
+			) - 1
+		);
+		connection.neighbour_colours.set(
+			colour,
+			connection.neighbour_colours.get(
+				colour
+			) + 1
+		);
+	});
 
 	layer.graph_colour = colour;
 }
 
+// Add initial states and neighbour counts to layers
+function SetupGraph(layers)
+{
+	layers
+	.forEach(layer => {
+		layer.graph_colour = UNKNOWN_COLOUR;
+
+		layer.neighbour_colours = new Map(
+			[...GRAPH_COLOURS]
+				.map(colour => [colour,0])
+		);
+
+		layer.neighbour_colours.set(
+			UNKNOWN_COLOUR,
+			layer.connections.size
+		);
+	});
+}
+
+// Attempts to colour a graph. To exhaust possibilities, this recurses
+// when a uncertain decision is made. Returns true if coloured, false if not,
+// and resets the graph when a colouring was not possible.
 function GraphColourLayers(layers)
 {
 	if (layers.length == 0)
 		return;
 
-	let input = new Set(layers);
-
-	layers
-	.forEach(layer =>
-		layer.graph_colour = UNKNOWN_COLOUR
-	);
-	layers
-	.forEach(layer => {
-		layer.neighbour_colours = new Map(
-			[...GRAPH_COLOURS]
-				.map(colour => [colour,0])
-		);
-		[...layer.connections].forEach(connection =>
-			layer.neighbour_colours.set(
-				connection.graph_colour, 
-				layer.neighbour_colours.get(
-					connection.graph_colour
-				) + 1
-			)
-		);
-	});
-
-	let trivialGroups = [];
+	const input = new Set(layers);
+	const trivial_groups = [];
 
 	do
 	{
@@ -839,15 +834,15 @@ function GraphColourLayers(layers)
 		for (let i = 0; i < input.size; i++)
 		{
 			let layer = [...input][i];
-			let possibleColours = GetPossibleLayerColours(layer);
+			let possible_colours = GetPossibleLayerColours(layer);
 
-			if (possibleColours.size > 1)
+			if (possible_colours.size > 1)
 				continue;
 
-			if (possibleColours.size == 0)
+			if (possible_colours.size == 0)
 				throw new Error("Cannot colour graph!");				
 
-			MarkLayerColour(layer,[...possibleColours][0]);
+			MarkLayerColour(layer,[...possible_colours][0]);
 			input.delete(layer);
 			i = -1;
 		}
@@ -855,36 +850,36 @@ function GraphColourLayers(layers)
 		if (input.size == 0)
 			break;
 
-		let trivial = new Set(
+		const trivial = new Set(
 			[...input]
 			.filter(layer => {
-				let possibleColours = GetPossibleLayerColours(layer)
+				const possible_colours = GetPossibleLayerColours(layer)
 				.size;
 
-				let unknownNeighbours = [...(
+				const unknown_neighbours = [...(
 					layer.connections.intersection(input)
 				)].filter(connection =>
 					connection.graph_colour == UNKNOWN_COLOUR
 				).length;
 
-				return possibleColours > unknownNeighbours;
+				return possible_colours > unknown_neighbours;
 			})
 		);
 
 		if (trivial.size > 0) 
 		{
-			trivialGroups.push(trivial);
+			trivial_groups.push(trivial);
 			input = input.difference(trivial);
 			continue;
 		}
 
 		// TODO: Replace sort by neighbour count with a sort by odd cycle count
-		let mostConnected = [...input]
+		const most_connected = [...input]
 		.slice(1)
-		.reduce((p,c) =>
-			c.connections.size > p.connections.size
-				? c
-				: p,
+		.reduce((previous,current) =>
+			current.connections.size > previous.connections.size
+				? current
+				: previous,
 			[...input][0]
 		);
 
@@ -892,26 +887,27 @@ function GraphColourLayers(layers)
 		// (Create a solver function that checks if a result is possible)
 
 		MarkLayerColour(
-			mostConnected,
+			most_connected,
 			[...GetPossibleLayerColours(
-				mostConnected
+				most_connected
 			)][0]
 		);
 
-		input.delete(mostConnected);
+		input.delete(most_connected);
 	}
 	while (input.size > 0);
 
 	// TODO: Add code to maximise distance between repeated colours
-	trivialGroups
+	trivial_groups
 	.reverse()
-	.forEach(tg =>
-		[...tg].sort((a,b) =>
+	.forEach(group =>
+		[...group]
+		.sort((a,b) =>
 			a.neighbour_colours.get(UNKNOWN_COLOUR) -
 			b.neighbour_colours.get(UNKNOWN_COLOUR)
 		)
 		.forEach(layer => { 
-			let colours = [...GetPossibleLayerColours(
+			const colours = [...GetPossibleLayerColours(
 				layer
 			)];
 			MarkLayerColour(
@@ -922,8 +918,6 @@ function GraphColourLayers(layers)
 			);
 		})
 	);
-
-	return layers;
 }
 
 // Signed distance to path as [Point...]
@@ -1321,22 +1315,25 @@ function UpdateLayers(e)
 	
 	if (!layers)
 	{
-		let graphics = SVGExtractGraphics(svg_input);
+		const graphics = SVGExtractGraphics(svg_input);
 		layers = GraphicsToLayers(graphics);
 		// TODO: Add transparency step, intersecting lower layers and setting fills to stacks of blends
 		layers = ClipOccludedLayers(layers);
 		layers = FuseLayerColours(layers);
 		layers = SeparateLayerPolys(layers);
 		layers = CullSmallLayers(layers);
-		layers = ConnectLayers(layers);
+		ConnectLayers(layers);
+		SetupGraph(layers);
 		layers = LayersCalculateVectors(layers);
 	}
 	else
 	{
-		layers.forEach(layer => layer.graph_colour = UNKNOWN_COLOUR);
+		layers.forEach(layer =>
+			MarkLayerColour(layer, UNKNOWN_COLOUR)
+		);
 	}
 
-	layers = GraphColourLayers(layers);
+	GraphColourLayers(layers);
 	DisplayLayers();
 
 	setTimeout(RenderSDF,0);
