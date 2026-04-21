@@ -783,7 +783,7 @@ function MarkLayerColour(layer, colour)
 	if (layer.graph_colour == colour)
 		return;
 
-	layer.connections.forEach(
+	[...layer.connections].forEach(
 		c => {
 			c.neighbour_colours.set(
 				layer.graph_colour,
@@ -820,7 +820,7 @@ function GraphColourLayers(layers)
 			[...GRAPH_COLOURS]
 				.map(colour => [colour,0])
 		);
-		layer.connections.forEach(connection =>
+		[...layer.connections].forEach(connection =>
 			layer.neighbour_colours.set(
 				connection.graph_colour, 
 				layer.neighbour_colours.get(
@@ -882,7 +882,7 @@ function GraphColourLayers(layers)
 		let mostConnected = [...input]
 		.slice(1)
 		.reduce((p,c) =>
-			c.connections.length > p.connections.length
+			c.connections.size > p.connections.size
 				? c
 				: p,
 			[...input][0]
