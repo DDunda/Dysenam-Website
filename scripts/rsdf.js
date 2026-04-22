@@ -874,27 +874,33 @@ function ClipOccludedLayers(layers)
 		if (layer.poly.flat(1).length == 0)
 			return false;
 		
-		clip_polys.push(...poly_copy);
+		if (layer.paint.opaque)
+			clip_polys.push(...poly_copy);
 
 		return true;
 	})
 	.reverse();
 }
 
-function FuseLayerPaints(layers)
+function FuseLayerPaints(layers, consider_blend = true)
 {
 	const paint_groups = new Map();
 	const clipper = new ClipperLib.Clipper();
 
 	layers.forEach(layer => {
+		const orig_blend = layer.paint.blend_mode;
 		for (const [paint, arr] of paint_groups)
 		{			
+			if (!consider_blend)
+				layer.paint.blend_mode = paint.blend_mode;
+			
 			if (!Paint.Equal(paint, layer.paint))
 				continue;
 
 			arr.push(layer.poly);
 			return;
 		}
+		layer.paint.blend_mode = orig_blend;
 		paint_groups.set(layer.paint, [layer.poly]);
 	});
 	

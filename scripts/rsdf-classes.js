@@ -994,7 +994,7 @@ class Paint
 		const URL_REGEX = /^url\((['"]?)\#(.+)\1\)$/;
 
 		if (!text)
-			return new PaintConstant(new RGB(0,0,0,opacity));
+			return new PaintConstant(new RGB(0,0,0,opacity), 1, blend_mode);
 		
 		const colour = RGB.FromString(text, linear);
 
@@ -1096,6 +1096,7 @@ class PaintConstant extends Paint
 				RGB.Blend(
 					bkg,
 					src,
+					blend_mode
 				),
 				1,
 				blend_mode
@@ -1110,7 +1111,8 @@ class PaintConstant extends Paint
 
 			stop.colour = RGB.Blend(
 				bkg,
-				src
+				src,
+				blend_mode
 			);
 		});
 
@@ -1140,6 +1142,7 @@ class PaintConstant extends Paint
 				RGB.Blend(
 					bkg,
 					src,
+					blend_mode,
 				),
 				1,
 				blend_mode
@@ -1154,7 +1157,8 @@ class PaintConstant extends Paint
 
 			stop.colour = RGB.Blend(
 				bkg,
-				src
+				src,
+				blend_mode
 			);
 		});
 
@@ -1173,7 +1177,7 @@ class PaintConstant extends Paint
 
 	get opaque()
 	{
-		return this.blend_mode == BLEND_MODE.NORMAL1
+		return this.blend_mode == BLEND_MODE.NORMAL
 			&& this.colour.a == 1;
 	}
 
@@ -1565,8 +1569,8 @@ class PaintGradientLinear extends Gradient
 		if (this.spread != other.spread)
 			return undefined;
 
-		const stops_a = this.stops.map(stop => stop.Copy());
-		const stops_b = other.stops.map(stop => stop.Copy());
+		const stops_a = other.stops.map(stop => stop.Copy());
+		const stops_b = this.stops.map(stop => stop.Copy());
 
 		if (Point.Equal(this.enda, other.endb) &&
 			Point.Equal(this.endb, other.enda))
@@ -1803,8 +1807,8 @@ class PaintGradientRadial extends Gradient
 		if (this.spread != other.spread)
 			return undefined;
 
-		const stops_a = this.stops.map(stop => stop.Copy());
-		const stops_b = other.stops.map(stop => stop.Copy());
+		const stops_a = other.stops.map(stop => stop.Copy());
+		const stops_b = this.stops.map(stop => stop.Copy());
 
 		if (
 			this.radius == other.focus_radius &&
@@ -1932,8 +1936,8 @@ class PaintGradientRadialSimple extends Gradient
 			!Point.Equal(this.center, other.center))
 			return undefined;
 
-		const stops_a = this.stops.map(stop => stop.Copy());
-		const stops_b = other.stops.map(stop => stop.Copy());
+		const stops_a = other.stops.map(stop => stop.Copy());
+		const stops_b = this.stops.map(stop => stop.Copy());
 
 		if (
 			this.outer_radius == other.inner_radius &&
