@@ -711,6 +711,15 @@ function FlattenGraphicsToLayers(graphics, background=undefined, is_root=true)
 
 	let clipper = new ClipperLib.Clipper();
 
+	if (background)
+	{
+		graphics[0].paint = new PaintComposite(
+			[background_paint, graphics[0].paint],
+			1,
+			BLEND_MODE.NORMAL
+		);
+	}
+
 	for (let i = 1; i < graphics.length; i++)
 	{
 		const covering = graphics[i];
@@ -764,6 +773,13 @@ function FlattenGraphicsToLayers(graphics, background=undefined, is_root=true)
 						difference_polys.push(covered.poly)
 					else
 						difference_polys.push(intersection);
+
+					covered.poly = GetPolyClip(
+						clipper,
+						covered.poly,
+						[covering.poly],
+						ClipperLib.ClipType.ctDifference
+					);
 				}
 			}
 			// One layer is equal to intersection, but they aren't equal to eachother.
