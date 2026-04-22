@@ -944,9 +944,12 @@ function SeparateLayerPolys(layers)
 
 	return layers
 	.map(layer => {
+		// Mainly used for the background, which is the inverse of the union
+		// of everything else and consequently negative.
+		const inverted = ClipperLib.JS.AreaOfPolygons(layer.poly) <= 0;
+
 		const polytree = new ClipperLib.PolyTree();
 
-		// TODO: Replace this hack with a direct convertion to polytree, if it exists (I could not find it)
 		clipper.Clear();
 		clipper.AddPaths(layer.poly, ClipperLib.PolyType.ptSubject, true);
 		clipper.Execute(
@@ -956,11 +959,45 @@ function SeparateLayerPolys(layers)
 			ClipperLib.PolyFillType.pftNonZero
 		);
 
-		const expolygons = ClipperLib.JS.PolyTreeToExPolygons(polytree);
+		const polys = [];
+		const nodes = inverted
+			? [polytree]
+			: [...polytree.Childs()];
+
+		while (nodes.length > 0)
+		{
+			const node = nodes.pop();
+			const node_contour = [...node.Contour()]
+			const node_children = [...node.Childs()];
+			const node_poly = [];
+
+			if (node_contour.length > 0)
+				node_poly.push(node_contour);
+
+			node_children
+			.forEach(child => {
+				node_poly.push([...child.Contour()]);
+				nodes.push(...child.Childs());
+			});
+			
+			polys.push(node_poly);
+		}
+
+		// Clipper will flip the contours if the outermost shape is inverted.
+		// Therefore, flip them back to how they started.
+		if (inverted)
+		{
+			polys
+			.forEach(poly => poly
+				.forEach(path =>
+					path = path.reverse()
+				)
+			);
+		}
 		
-		return expolygons
-		.map(exp => ({
-			poly: ClipperLib.JS.ExPolygonsToPaths([exp]),
+		return polys
+		.map(poly => ({
+			poly: poly,
 			paint: layer.paint
 		}));
 	})
@@ -975,7 +1012,7 @@ function CullSmallLayers(layers)
 				>= WORKING_SCALE * WORKING_SCALE * MIN_AREA
 		);
 		return layer.poly.flat(1).length > 0 &&
-			ClipperLib.JS.AreaOfPolygons(layer.poly)
+			Math.abs(ClipperLib.JS.AreaOfPolygons(layer.poly))
 			>= WORKING_SCALE * WORKING_SCALE * MIN_AREA;
 	});
 }
