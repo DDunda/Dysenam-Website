@@ -24,6 +24,8 @@ const BLEED = {
 const COLOUR_DEPTH = 8;
 const COLOUR_MAX_VALUE = Math.pow(2, COLOUR_DEPTH) - 1;
 const COLOUR_LINEAR = false;
+const COLOUR_BACKGROUND = true;
+const COLOUR_BACKGROUND_COLOUR = new RGB(0,0,0,0);
 const COLOUR_INVALID_FILL_COLOUR = new RGB(1,0,1,1);
 const COLOUR_BLEED_COLOUR = new RGB(1,0,1,1);
 const COLOUR_BLEED_MODE = BLEED.CLOSEST; // If two channels share a minima, which colour do you pick?
@@ -683,17 +685,21 @@ function SVGExtractGraphics(element, matrix = undefined, root = element)
 }
 
 // Takes transparent layers and composites them onto layers beneath
-function FlattenGraphicsToLayers(graphics, is_root=true)
+function FlattenGraphicsToLayers(graphics, background=undefined, is_root=true)
 {
 	if (is_root)
 		console.time("FlattenGraphicsToLayers");
+
+	const background_paint = background ? new PaintConstant(
+		background.Copy()
+	) : undefined;
 
 	graphics = graphics
 	.map(graphic => {
 		if (!graphic.group)
 			return graphic;
 
-		const children = FlattenGraphicsToLayers(graphic.children,false);
+		const children = FlattenGraphicsToLayers(graphic.children,undefined,false);
 		if (graphic.blend_mode != BLEND_MODE.NORMAL)
 			children.forEach(child =>
 				child.paint.blend_mode = graphic.blend_mode
@@ -708,6 +714,12 @@ function FlattenGraphicsToLayers(graphics, is_root=true)
 	for (let i = 1; i < graphics.length; i++)
 	{
 		const covering = graphics[i];
+		// The paint this layer will take once it flattens onto the background
+		const covering_blend = background ? new PaintComposite(
+			[background_paint, covering.paint],
+			1,
+			BLEND_MODE.NORMAL
+		) : covering.paint;
 
 		const union_polys = [];
 		const difference_polys = [];
@@ -716,19 +728,19 @@ function FlattenGraphicsToLayers(graphics, is_root=true)
 		{
 			const covered = graphics[j];
 
-			const composite_paint = covering.paint
+			const intersection_paint = covering.paint
 				.CompositeOver(covered.paint);
 
-			const composite_equals_covered = Paint.Equal(covered.paint, composite_paint);
-			const composite_equals_covering = Paint.Equal(covering.paint, composite_paint);
-			const equal_paints = Paint.Equal(covered.paint, covering.paint);
+			const intersection_equals_covered = Paint.Equal(covered.paint, intersection_paint);
+			const intersection_equals_covering = Paint.Equal(covering_blend, intersection_paint);
+			const equal_paints = Paint.Equal(covered.paint, covering_blend);
 
 			// Fuse these paints
 			if (equal_paints)
 				union_polys.push(covered.poly);
 			
 			// The intersection is different to both paints
-			if (!composite_equals_covering && !composite_equals_covered)
+			if (!intersection_equals_covering && !intersection_equals_covered)
 			{
 				const intersection = GetPolyClip(
 					clipper,
@@ -741,7 +753,7 @@ function FlattenGraphicsToLayers(graphics, is_root=true)
 				{
 					graphics.splice(j, 0,
 						{
-							paint: composite_paint,
+							paint: intersection_paint,
 							poly: intersection
 						}
 					);
@@ -754,12 +766,12 @@ function FlattenGraphicsToLayers(graphics, is_root=true)
 						difference_polys.push(intersection);
 				}
 			}
-			// One layer is equal to composite, but they aren't equal to eachother.
+			// One layer is equal to intersection, but they aren't equal to eachother.
 			// Therefore, cut one from the other without processing the intersection
 			else if (!equal_paints)
 			{
 				// Cut the bottom out of the top
-				if (composite_equals_covered)
+				if (intersection_equals_covered)
 				{
 					difference_polys.push(covered.poly);
 				}
@@ -795,6 +807,7 @@ function FlattenGraphicsToLayers(graphics, is_root=true)
 			difference_polys,
 			ClipperLib.ClipType.ctDifference
 		);
+		covering.paint = covering_blend;
 
 		if (covering.poly.flat(1).length == 0)
 		{
@@ -803,13 +816,63 @@ function FlattenGraphicsToLayers(graphics, is_root=true)
 		}
 	}
 
-	graphics.filter(layer => {
+	graphics = graphics.filter(layer => {
 		layer.poly = ClipperLib.Clipper.SimplifyPolygons(layer.poly, ClipperLib.PolyFillType.pftNonZero);
 		layer.poly = ClipperLib.Clipper.CleanPolygons(layer.poly, CLEANUP_DELTA * WORKING_SCALE);
 		return layer.poly.flat(1).length > 0
-
 	});
+
+	if (background === undefined)
+	{
+		if (is_root)
+			console.timeEnd("FlattenGraphicsToLayers");
+
+		return graphics;
+	}
+
+	graphics = graphics.filter(
+		layer => !Paint.Equal(layer.paint, background_paint)			
+	);
+
+	let background_poly = new ClipperLib.Paths();
+
+	clipper.Clear();
 	
+	// Without this, the background can sometimes create adjacent but separate polygons;
+	// Even after using SimplifyPolygons and CleanPolygons!
+	clipper.StrictlySimple = true;
+
+	graphics.forEach(layer =>
+		clipper.AddPaths(layer.poly, ClipperLib.PolyType.ptClip, true)
+	);
+
+	clipper.Execute(
+		ClipperLib.ClipType.ctUnion,
+		background_poly,
+		ClipperLib.PolyFillType.pftNonZero,
+		ClipperLib.PolyFillType.pftNonZero
+	);
+					
+	background_poly = ClipperLib.Clipper.SimplifyPolygons(background_poly, ClipperLib.PolyFillType.pftNonZero);
+	background_poly = ClipperLib.Clipper.CleanPolygons(background_poly, CLEANUP_DELTA * WORKING_SCALE);
+
+	background_poly = background_poly
+	.filter(path => path.length > 0)
+	.filter(path =>
+		Math.abs(ClipperLib.Clipper.Area(path))
+		>= WORKING_SCALE * WORKING_SCALE * MIN_AREA
+	)
+	// Reverse the winding order to fill the outside; the inverse of the union
+	.map(path => path.reverse());
+
+	if (background_poly.flat(1).length > 0)
+	{
+		graphics.unshift({
+			poly: background_poly,
+			paint: background_paint
+		});
+	}
+
 	if (is_root)
 		console.timeEnd("FlattenGraphicsToLayers");
 
@@ -1902,7 +1965,10 @@ function UpdateLayers(e)
 	if (!layers)
 	{
 		const graphics = SVGExtractGraphics(svg_input);
-		layers = FlattenGraphicsToLayers(graphics)
+		layers = FlattenGraphicsToLayers(
+			graphics,
+			COLOUR_BACKGROUND ? COLOUR_BACKGROUND_COLOUR : undefined
+		);
 		layers = SeparateLayerPolys(layers);
 		layers = CullSmallLayers(layers);
 		ConnectLayers(layers);
