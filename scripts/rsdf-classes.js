@@ -806,9 +806,9 @@ class RGB
 
 	static Equal(a, b)
 	{
-		return (a == undefined && b == undefined) 
+		return (a === undefined && b === undefined)
 		|| (
-			a != undefined && b != undefined
+			a !== undefined && b !== undefined
 			&& a.r == b.r
 			&& a.g == b.g
 			&& a.b == b.b
@@ -1053,14 +1053,14 @@ class PaintConstant extends Paint
 	constructor(colour, opacity = 1, blend_mode = BLEND_MODE.NORMAL)
 	{
 		super(blend_mode);
-		this.colour = colour.Copy();
+		this.colour = colour;
 		this.colour.a *= opacity;
 	}
 
 	Copy()
 	{
 		return new PaintConstant(
-			this.colour,
+			this.colour.Copy(),
 			1,
 			this.blend_mode
 		);
@@ -1229,7 +1229,7 @@ class GradientStop
 	{
 		return new GradientStop(
 			this.offset,
-			this.colour
+			this.colour.Copy()
 		);
 	}
 
@@ -1242,9 +1242,9 @@ class GradientStop
 	static MergeStops(stops_bkg, stops_src, blend_mode)
 	{
 		if (stops_bkg.length == 0)
-			return stops_src;
+			return stops_src.map(stops_src => stops_src.Copy());
 		if (stops_src.length == 0)
-			return stops_bkg;
+			return stops_bkg.map(stops_bkg => stops_bkg.Copy());
 
 		let stops = [];
 
@@ -1434,9 +1434,6 @@ class PaintGradientLinear extends Gradient
 		blend_mode
 	)
 	{
-		if (stops.length == 0)
-			return undefined;
-
 		if (opacity == 0 || stops.every(stop => stop.a == 0))
 			return new PaintConstant(new RGB(0,0,0,0), opacity, blend_mode);
 
@@ -1497,6 +1494,9 @@ class PaintGradientLinear extends Gradient
 			Point.Distance(enda,endb),
 			linear
 		);
+
+		if (stops.length == 0)
+			return undefined;
 
 		return new PaintGradientLinear(
 			enda,
@@ -1569,12 +1569,17 @@ class PaintGradientLinear extends Gradient
 		if (this.spread != other.spread)
 			return undefined;
 
-		const stops_a = other.stops.map(stop => stop.Copy());
-		const stops_b = this.stops.map(stop => stop.Copy());
+		const stops_a = other.stops;
+		const stops_b = this.stops;
 
 		if (Point.Equal(this.enda, other.endb) &&
 			Point.Equal(this.endb, other.enda))
-			stops_b.forEach(stop => stop.offset = 1 - stop.offset);
+			stops_b = stops_b.map(stop =>
+				new GradientStop(
+					1 - stop.offset,
+					stop.colour
+				)
+			);
 		else if (
 			!Point.Equal(this.enda, other.enda) ||
 			!Point.Equal(this.endb, other.endb))
@@ -1621,9 +1626,6 @@ class PaintGradientRadial extends Gradient
 				opacity,
 				blend_mode
 			);
-
-		if (stops.length == 0)
-			return undefined;
 		
 		if (opacity == 0 || stops.every(stop => stop.colour.a == 0))
 			return new PaintConstant(new RGB(0,0,0,0), opacity, blend_mode);
@@ -1711,6 +1713,9 @@ class PaintGradientRadial extends Gradient
 			: Gradient.SPREAD.PAD;
 
 		const stops = GradientStop.StopsFromElement(element, r-fr, linear);
+
+		if (stops.length == 0)
+			return undefined;
 
 		return new PaintGradientRadial(
 			new Point(cx,cy),
@@ -1807,8 +1812,8 @@ class PaintGradientRadial extends Gradient
 		if (this.spread != other.spread)
 			return undefined;
 
-		const stops_a = other.stops.map(stop => stop.Copy());
-		const stops_b = this.stops.map(stop => stop.Copy());
+		const stops_a = other.stops;
+		const stops_b = this.stops;
 
 		if (
 			this.radius == other.focus_radius &&
@@ -1816,7 +1821,12 @@ class PaintGradientRadial extends Gradient
 			Point.Equal(this.center, other.focus) &&
 			Point.Equal(this.focus, other.center)
 		)
-			stops_b.forEach(stop => stop.offset = 1 - stop.offset);
+			stops_b = stops_b.map(stop =>
+				new GradientStop(
+					1 - stop.offset,
+					stop.colour
+				)
+			);
 		else if (!(
 			this.radius == other.radius &&
 			this.focus_radius == other.focus_radius &&
@@ -1864,9 +1874,6 @@ class PaintGradientRadialSimple extends Gradient
 		blend_mode
 	)
 	{
-		if (stops.length == 0)
-			return undefined;
-		
 		if (opacity == 0 || stops.every(stop => stop.a == 0))
 			return new PaintConstant(new RGB(0,0,0,0), opacity, blend_mode);
 
@@ -1936,14 +1943,19 @@ class PaintGradientRadialSimple extends Gradient
 			!Point.Equal(this.center, other.center))
 			return undefined;
 
-		const stops_a = other.stops.map(stop => stop.Copy());
-		const stops_b = this.stops.map(stop => stop.Copy());
+		const stops_a = other.stops;
+		const stops_b = this.stops;
 
 		if (
 			this.outer_radius == other.inner_radius &&
 			this.inner_radius == other.outer_radius
 		)
-			stops_b.forEach(stop => stop.offset = 1 - stop.offset);
+			stops_b = stops_b.map(stop =>
+				new GradientStop(
+					1 - stop.offset,
+					stop.colour
+				)
+			);
 		else if (!(
 			this.outer_radius == other.outer_radius &&
 			this.inner_radius == other.inner_radius
@@ -1987,9 +1999,6 @@ class PaintComposite extends Paint
 			});
 		})
 		.flat(1);
-
-		if (paints.length == 0)
-			return undefined;
 
 		if (opacity == 0)
 			return new PaintConstant(new RGB(0,0,0,0), 0, blend_mode);
