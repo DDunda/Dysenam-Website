@@ -1041,7 +1041,7 @@ class Paint
 			return this.Copy();
 
 		return new PaintComposite(
-			[other,this],
+			[other.Copy(),this.Copy()],
 			1,
 			BLEND_MODE.NORMAL
 		);
@@ -1075,13 +1075,16 @@ class PaintConstant extends Paint
 	// Returns undefined if this cannot merge into a single paint
 	MergeAtop(other)
 	{
-		if (this.blend_mode != other.blend_mode)
-			return undefined;
-
 		const blend_mode = this.blend_mode;
 
-		if (!MERGABLE_BLEND_MODES.has(blend_mode))
-			return undefined;
+		if (!other.opaque)
+		{
+			if (this.blend_mode != other.blend_mode)
+				return undefined;
+
+			if (!MERGABLE_BLEND_MODES.has(blend_mode))
+				return undefined;
+		}
 
 		if (other.constructor == PaintComposite)
 			return undefined;
@@ -1099,7 +1102,7 @@ class PaintConstant extends Paint
 					blend_mode
 				),
 				1,
-				blend_mode
+				other.blend_mode
 			);
 		}
 
@@ -1121,13 +1124,16 @@ class PaintConstant extends Paint
 
 	MergeBelow(other)
 	{
-		if (this.blend_mode != other.blend_mode)
-			return undefined;
+		const blend_mode = other.blend_mode;
 
-		const blend_mode = this.blend_mode;
-		
-		if (!MERGABLE_BLEND_MODES.has(blend_mode))
-			return undefined;
+		if (!this.opaque)
+		{
+			if (this.blend_mode != other.blend_mode)
+				return undefined;
+
+			if (!MERGABLE_BLEND_MODES.has(blend_mode))
+				return undefined;
+		}
 
 		if (other.constructor == PaintComposite)
 			return undefined;
@@ -1145,7 +1151,7 @@ class PaintConstant extends Paint
 					blend_mode,
 				),
 				1,
-				blend_mode
+				this.blend_mode
 			);
 		}
 
@@ -1161,6 +1167,8 @@ class PaintConstant extends Paint
 				blend_mode
 			);
 		});
+
+		merged.blend_mode = this.blend_mode;
 
 		return merged;
 	}
@@ -1552,6 +1560,9 @@ class PaintGradientLinear extends Gradient
 
 	MergeAtop(other)
 	{
+		if (other.constructor == PaintConstant)
+			return other.MergeBelow(this);
+
 		if (this.blend_mode != other.blend_mode)
 			return undefined;
 
@@ -1559,9 +1570,6 @@ class PaintGradientLinear extends Gradient
 
 		if (!MERGABLE_BLEND_MODES.has(blend_mode))
 			return undefined;
-
-		if (other.constructor == PaintConstant)
-			return other.MergeBelow(this);
 
 		if (other.constructor != PaintGradientLinear)
 			return undefined;
@@ -1795,6 +1803,9 @@ class PaintGradientRadial extends Gradient
 
 	MergeAtop(other)
 	{
+		if (other.constructor == PaintConstant)
+			return other.MergeBelow(this);
+
 		if (this.blend_mode != other.blend_mode)
 			return undefined;
 
@@ -1802,9 +1813,6 @@ class PaintGradientRadial extends Gradient
 
 		if (!MERGABLE_BLEND_MODES.has(blend_mode))
 			return undefined;
-
-		if (other.constructor == PaintConstant)
-			return other.MergeBelow(this);
 
 		if (other.constructor != PaintGradientRadial)
 			return undefined;
@@ -1925,6 +1933,9 @@ class PaintGradientRadialSimple extends Gradient
 
 	MergeAtop(other)
 	{
+		if (other.constructor == PaintConstant)
+			return other.MergeBelow(this);
+
 		if (this.blend_mode != other.blend_mode)
 			return undefined;
 
@@ -1932,9 +1943,6 @@ class PaintGradientRadialSimple extends Gradient
 
 		if (!MERGABLE_BLEND_MODES.has(blend_mode))
 			return undefined;
-
-		if (other.constructor == PaintConstant)
-			return other.MergeBelow(this);
 
 		if (other.constructor != PaintGradientRadialSimple)
 			return undefined;
@@ -2011,7 +2019,7 @@ class PaintComposite extends Paint
 
 			const merged = paints[i].MergeAtop(paints[i - 1]);
 			
-			if (merged == undefined)
+			if (merged === undefined)
 				continue;
 
 			// Remove this paint and the one below, replacing it with

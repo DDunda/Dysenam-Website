@@ -714,7 +714,7 @@ function FlattenGraphicsToLayers(graphics, background=undefined, is_root=true)
 	if (background)
 	{
 		graphics[0].paint = new PaintComposite(
-			[background_paint, graphics[0].paint],
+			[background_paint.Copy(), graphics[0].paint],
 			1,
 			BLEND_MODE.NORMAL
 		);
