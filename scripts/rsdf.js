@@ -934,35 +934,31 @@ function FuseLayerPaints(layers)
 
 function SeparateLayerPolys(layers)
 {
-	let clipper = new ClipperLib.Clipper();
+	const clipper = new ClipperLib.Clipper();
 
-	let new_layers = [];
-	layers.forEach(
-		layer =>
-		{
-			let polytree = new ClipperLib.PolyTree();
+	return layers
+	.map(layer => {
+		const polytree = new ClipperLib.PolyTree();
 
-			// TODO: Replace this hack with a direct convertion to polytree, if it exists (I could not find it)
-			clipper.Clear();
-			clipper.AddPaths(layer.poly, ClipperLib.PolyType.ptSubject, true);
-			clipper.Execute(
-				ClipperLib.ClipType.ctUnion,
-				polytree,
-				ClipperLib.PolyFillType.pftNonZero,
-				ClipperLib.PolyFillType.pftNonZero
-			);
+		// TODO: Replace this hack with a direct convertion to polytree, if it exists (I could not find it)
+		clipper.Clear();
+		clipper.AddPaths(layer.poly, ClipperLib.PolyType.ptSubject, true);
+		clipper.Execute(
+			ClipperLib.ClipType.ctUnion,
+			polytree,
+			ClipperLib.PolyFillType.pftNonZero,
+			ClipperLib.PolyFillType.pftNonZero
+		);
 
-			let expolygons = ClipperLib.JS.PolyTreeToExPolygons(polytree);
-			
-			expolygons.forEach(
-				exp => new_layers.push({
-					poly: ClipperLib.JS.ExPolygonsToPaths([exp]),
-					paint: layer.paint
-				})
-			);
-		}
-	);
-	return new_layers;
+		const expolygons = ClipperLib.JS.PolyTreeToExPolygons(polytree);
+		
+		return expolygons
+		.map(exp => ({
+			poly: ClipperLib.JS.ExPolygonsToPaths([exp]),
+			paint: layer.paint
+		}));
+	})
+	.flat(1);
 }
 
 function CullSmallLayers(layers)
