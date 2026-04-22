@@ -703,8 +703,6 @@ function FlattenGraphicsToLayers(graphics, is_root=true)
 	})
 	.flat(1);
 
-	graphics = ClipOccludedLayers(graphics);
-
 	let clipper = new ClipperLib.Clipper();
 
 	for (let i = 1; i < graphics.length; i++)
@@ -724,9 +722,13 @@ function FlattenGraphicsToLayers(graphics, is_root=true)
 			const composite_equals_covered = Paint.Equal(covered.paint, composite_paint);
 			const composite_equals_covering = Paint.Equal(covering.paint, composite_paint);
 			const equal_paints = Paint.Equal(covered.paint, covering.paint);
+
+			// Fuse these paints
+			if (equal_paints)
+				union_polys.push(covered.poly);
 			
 			// The intersection is different to both paints
-			if (!covering.paint.opaque && !composite_equals_covering && !composite_equals_covered)
+			if (!composite_equals_covering && !composite_equals_covered)
 			{
 				const intersection = GetPolyClip(
 					clipper,
@@ -752,19 +754,17 @@ function FlattenGraphicsToLayers(graphics, is_root=true)
 						difference_polys.push(intersection);
 				}
 			}
-
-			if (equal_paints) // Fuse these paints
+			// One layer is equal to composite, but they aren't equal to eachother.
+			// Therefore, cut one from the other without processing the intersection
+			else if (!equal_paints)
 			{
-				union_polys.push(covered.poly);
-				covered.poly = [];
-			}
-			else
-			{
-				if (!composite_equals_covering && composite_equals_covered) // Cut the bottom out of the top
+				// Cut the bottom out of the top
+				if (composite_equals_covered)
 				{
 					difference_polys.push(covered.poly);
 				}
-				if (!composite_equals_covered) // Cut the top out of the bottom
+				// Cut the top out of the bottom
+				else
 				{
 					covered.poly = GetPolyClip(
 						clipper,
@@ -775,7 +775,7 @@ function FlattenGraphicsToLayers(graphics, is_root=true)
 				}
 			}
 
-			if (covered.poly.flat(1).length == 0)
+			if (equal_paints || covered.poly.flat(1).length == 0)
 			{
 				graphics.splice(j,1);
 				i--;
