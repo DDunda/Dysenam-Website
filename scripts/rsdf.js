@@ -874,7 +874,6 @@ function ClipOccludedLayers(layers)
 		if (layer.poly.flat(1).length == 0)
 			return false;
 		
-		clip_polys.push(...layer.poly);
 		clip_polys.push(...poly_copy);
 
 		return true;
