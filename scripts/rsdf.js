@@ -848,6 +848,16 @@ function ClipOccludedLayers(layers)
 	return layers
 	.reverse() // Start from top layer
 	.filter(layer => {
+		if (layer.poly.flat(1).length == 0)
+			return false;
+
+		const poly_copy = [...layer.poly]
+		.map(path => [...path]
+			.map(point => 
+				({X: point.X, Y: point.Y})
+			)
+		);
+
 		if (clip_polys.length > 0)
 		{
 			clipper.Clear();
@@ -865,6 +875,7 @@ function ClipOccludedLayers(layers)
 			return false;
 		
 		clip_polys.push(...layer.poly);
+		clip_polys.push(...poly_copy);
 
 		return true;
 	})
