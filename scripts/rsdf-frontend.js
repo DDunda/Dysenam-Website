@@ -11,7 +11,7 @@ function UploadSVG(e)
 	SATURATED_CANVAS.style.display = "none";
 	FALSECOLOUR_CANVAS.style.display = "none;"
 	COLOUR_CANVAS.style.display = "none";
-	layers = undefined;
+	import_converter = undefined;
 
 	let file = e.target.files[0];
 	filename = "";
@@ -36,7 +36,7 @@ function UploadSVG(e)
 		if (!svg_input.hasAttribute("viewBox"))
 			throw new Error("SVG has no viewBox!");
 		
-		viewbox = svg_input
+		const viewbox = svg_input
 			.getAttribute("viewBox")
 			.split(/\s+|,/);
 
@@ -58,12 +58,10 @@ function UploadSVG(e)
 			Number(viewbox[3])
 		);
 
-		viewbox = new Bounds(
+		CONVERTER.viewbox = new Bounds(
 			viewbox_pos,
 			viewbox_pos.Add(viewbox_size)
 		);
-		
-		svg_size = Math.max(viewbox.width, viewbox.height);
 	};
 
 	reader.onerror = () => {
@@ -84,29 +82,29 @@ function UpdateLayers(e)
 	if (!svg_input)
 		return;
 	
-	if (!layers)
+	if (!import_converter || !import_converter.ImportIsClean(CONVERTER))
 	{
-		const graphics = SVGExtractGraphics(svg_input);
-		layers = FlattenGraphicsToLayers(
+		const graphics = CONVERTER.SVGExtractGraphics(svg_input);
+		layers = CONVERTER.FlattenGraphicsToLayers(
 			graphics,
-			COLOUR_BACKGROUND ? COLOUR_BACKGROUND_COLOUR : undefined,
 			true
 		);
-		layers = SeparateLayerPolys(layers);
-		layers = CullSmallLayers(layers);
-		ConnectLayers(layers);
-		layers.forEach(layer => layer.poly = CPolyToPoints(layer.poly));
-		SetupGraph(layers);
-		layers = LayersCalculateVectors(layers);
+		layers = CONVERTER.SeparateLayerPolys(layers);
+		layers = CONVERTER.CullSmallLayers(layers);
+		CONVERTER.ConnectLayers(layers);
+		layers.forEach(layer => layer.poly = CONVERTER.CPolyToPoints(layer.poly));
+		CONVERTER.SetupGraph(layers);
+		layers = CONVERTER.LayersCalculateVectors(layers);
+		import_converter = CONVERTER.Copy();
 	}
 	else
 	{
 		layers.forEach(layer =>
-			LabelLayer(layer, LABEL_UNKNOWN)
+			CONVERTER.LabelLayer(layer, RSDFConverter.LABEL_UNKNOWN)
 		);
 	}
 
-	if (!LabelGraph(layers))
+	if (!CONVERTER.LabelGraph(layers))
 	{
 		DisplayLayers();
 		layers = undefined;
@@ -121,6 +119,7 @@ function UpdateLayers(e)
 
 function DisplayLayers()
 {	
+	const SVG_SIZE = CONVERTER.svg_size;
 	const visited = new Set();
 	svg_overlay_group = CreateSVGElement("g","overlay");
 	let edges = CreateSVGElement("g","edges");
@@ -133,14 +132,14 @@ function DisplayLayers()
 
 	layers
 	.forEach(layer => {
-		const fill = VISUALISATION_LABELS.get(layer.graph_label);
+		const fill = RSDFConverter.VISUALISATION_LABELS.get(layer.graph_label);
 		
 		AddPaths(
 			svg_overlay_group,
 			PathsToString(layer.poly),
 			fill,
 			ClipperLib.JS.AreaOfPolygons(layer.poly) >= 0 ? "#777" : "#f33",
-			svg_size * DEBUG_LINE_THICKNESS
+			SVG_SIZE * CONVERTER.graph_thickness
 		);
 
 		visited.add(layer);
@@ -154,7 +153,7 @@ function DisplayLayers()
 				line,
 				{
 					stroke: "#F00",
-					"stroke-width": svg_size * DEBUG_LINE_THICKNESS,
+					"stroke-width": SVG_SIZE * CONVERTER.graph_thickness,
 					"stroke-linejoin": "round",
 					x1: layer.center.X,
 					y1: layer.center.Y,
@@ -173,11 +172,11 @@ function DisplayLayers()
 			{
 				fill: fill,
 				stroke: "#F00",
-				"stroke-width": svg_size * DEBUG_LINE_THICKNESS,
+				"stroke-width": SVG_SIZE * CONVERTER.graph_thickness,
 				"stroke-linejoin": "round",
 				cx: layer.center.X,
 				cy: layer.center.Y,
-				r: svg_size * DEBUG_LINE_THICKNESS * 4
+				r: SVG_SIZE * CONVERTER.graph_thickness * 4
 			}
 		);
 		
@@ -191,18 +190,19 @@ function DisplayLayers()
 
 function RenderSDF()
 {
-	mapping = GetImageMapping(layers);
+	mapping = CONVERTER.GetImageMapping(layers);
 
 	// Todo: Move processing to a web worker so the page does not lock up, and progress can be displayed
-	const dists = LabelledLayersToDistances(layers, mapping);
+	const dists = CONVERTER.LabelledLayersToDistances(layers, mapping);
 
-	sdf_img = DistancesToSDFImage(
+	sdf_img = CONVERTER.DistancesToSDFImage(
 		dists,
-		mapping,
-		SDF_PERPENDICULAR
+		mapping
 	);
 
-	if (SDF_FALSECOLOUR)
+	img_converter = CONVERTER.Copy();
+
+	if (CONVERTER.render_falsecolour)
 	{
 		FALSECOLOUR_CANVAS.style.display = "";
 		FALSECOLOUR_CANVAS.width = mapping.size.X;
@@ -213,16 +213,16 @@ function RenderSDF()
 
 		falsecolour_img = [...sdf_img];
 
-		if (SDF_INVERT)
-			falsecolour_img = InvertSDFImage(falsecolour_img);
+		if (CONVERTER.inverted)
+			falsecolour_img = CONVERTER.InvertSDFImage(falsecolour_img);
 
-		falsecolour_img = FalseColourSDFImage(falsecolour_img);
+		falsecolour_img = CONVERTER.FalseColourSDFImage(falsecolour_img);
 
 		falsecolour_img.forEach((v,i) => falsecolour_data[i] = v);
 		FALSECOLOUR_CTX.putImageData(falsecolour_img_data,0,0);
 	}
 
-	if (SDF_SATURATE)
+	if (CONVERTER.render_regions)
 	{
 		SATURATED_CANVAS.style.display = "";
 		SATURATED_CANVAS.width = mapping.size.X;
@@ -231,19 +231,19 @@ function RenderSDF()
 		const saturated_img_data = SATURATED_CTX.getImageData(0,0,mapping.size.X,mapping.size.Y);
 		const saturated_data = saturated_img_data.data;
 
-		saturated_img = SaturateSDFImage([...sdf_img]);
+		saturated_img = CONVERTER.SaturateSDFImage([...sdf_img]);
 
-		if (SDF_INVERT)
-			saturated_img = InvertSDFImage(saturated_img);
+		if (CONVERTER.inverted)
+			saturated_img = CONVERTER.InvertSDFImage(saturated_img);
 
-		if (SDF_FALSECOLOUR)
-			saturated_img = FalseColourSDFImage(saturated_img);
+		if (CONVERTER.render_falsecolour)
+			saturated_img = CONVERTER.FalseColourSDFImage(saturated_img);
 
 		saturated_img.forEach((v,i) => saturated_data[i] = v);
 		SATURATED_CTX.putImageData(saturated_img_data,0,0);
 	}
 
-	if (SDF_COLOUR)
+	if (CONVERTER.render_colour)
 	{
 		COLOUR_CANVAS.style.display = "";
 		COLOUR_CANVAS.width = mapping.size.X;
@@ -252,7 +252,7 @@ function RenderSDF()
 		const colour_img_data = COLOUR_CTX.getImageData(0,0,mapping.size.X,mapping.size.Y);
 		const colour_data = colour_img_data.data;
 
-		colour_img = DistancesToColourImage(
+		colour_img = CONVERTER.DistancesToColourImage(
 			dists,
 			sdf_img,
 			mapping
@@ -269,8 +269,8 @@ function RenderSDF()
 	const img_data = CANVAS_CTX.getImageData(0,0,mapping.size.X,mapping.size.Y);
 	const data = img_data.data;
 
-	if (SDF_INVERT)
-		sdf_img = InvertSDFImage(sdf_img);
+	if (CONVERTER.inverted)
+		sdf_img = CONVERTER.InvertSDFImage(sdf_img);
 
 	sdf_img.forEach((v,i) => data[i] = v);
 	CANVAS_CTX.putImageData(img_data,0,0);
@@ -285,7 +285,7 @@ function SaveCanvas(data, name)
 		{
 			width: mapping.size.X,
 			height: mapping.size.Y,
-			bitDepth: COLOUR_DEPTH
+			bitDepth: img_converter.bit_depth
 		}
 	);
 
@@ -312,15 +312,15 @@ function SaveSDFs(e)
 		: `${mapping.size.X}x${mapping.size.Y}`	
 	}_`;
 
-	const inner = -SDF_INNER_RANGE.toFixed(2);
-	const outer = SDF_OUTER_RANGE.toFixed(2);
+	const inner = -img_converter.inner_px.toFixed(2);
+	const outer = img_converter.outer_px.toFixed(2);
 
 	const filename_suffix = `_${
 		inner == outer
-		? (SDF_OUTER_RANGE - SDF_INNER_RANGE).toFixed(2)
+		? (img_converter.outer_px - img_converter.inner_px).toFixed(2)
 		: `-${inner}_+${outer}`
 	}${
-		SDF_INVERT
+		img_converter.inverted
 		? "_Inverted"
 		: ""
 	}`;
@@ -357,6 +357,8 @@ function AddCallbacks()
 	BUTTON_SAVE.addEventListener("click", SaveSDFs);
 }
 
+const CONVERTER = new RSDFConverter();
+
 const UPLOAD_INPUT = document.getElementById("upload-input");
 const BUTTON_CONVERT = document.getElementById("button-convert");
 const BUTTON_SAVE = document.getElementById("button-save");
@@ -381,6 +383,8 @@ let svg_overlay_group = null;
 let layers = [];
 let filename = "";
 
+let import_converter = undefined; // The converter settings used to import the SVG to polygons
+let img_converter = undefined; // The converter settings used for the current generated image/s
 let mapping = undefined; // Mapping from pixels to SVG units
 let sdf_img = [];
 let falsecolour_img = [];

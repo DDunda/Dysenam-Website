@@ -1,125 +1,3 @@
-const POLY_STEP = Math.pow(2,-9);
-const CLEANUP_DELTA = Math.pow(2,-20);
-const WORKING_SCALE = Math.pow(2,24);
-const DEBUG_LINE_THICKNESS = Math.pow(2,-11);
-const ADJACENCY_MAX_DISTANCE = POLY_STEP * Math.pow(2,-1);
-const ADJACENCY_ANGLE_STEPS = Math.pow(2,8);
-const MIN_AREA = Math.pow(2,-18);
-const SDF_SIZE = Math.pow(2,8); // Size of rendered sdf
-const SDF_PERPENDICULAR = false; // Whether distance should be perpendicular rather than euclidean
-const SDF_INVERT = false; // Whether to map distances from [0,1] to [1,0]
-const SDF_SATURATE = true; // Whether to set distances to exclusively the minima. Good for debugging, finding doubles, making colour maps by hand...
-const SDF_FALSECOLOUR = false; // Whether the SDF should render with false colour (fully opaque within 3 channels)
-const SDF_COLOUR = true; // Whether the SDF should render the image colour
-const SDF_INNER_RANGE = -1; // Pixels relative to size of image
-const SDF_OUTER_RANGE = 1; // Pixels relative to size of image
-
-const BLEED = {
-	CLOSEST: 0, // Pick the true closest channel
-	AVERAGE: 1, // Average the minimum channels' colours
-	MARK: 2 // Ignore the input colour and mark with an error colour
-};
-
-const COLOUR_DEPTH = 8;
-const COLOUR_MAX_VALUE = Math.pow(2, COLOUR_DEPTH) - 1;
-const COLOUR_LINEAR = false;
-const COLOUR_BACKGROUND = true;
-const COLOUR_BACKGROUND_COLOUR = new RGB(0,0,0,0);
-const COLOUR_INVALID_FILL_COLOUR = new RGB(1,0,1,1);
-const COLOUR_BLEED_COLOUR = new RGB(1,0,1,1);
-const COLOUR_BLEED_MODE = BLEED.CLOSEST; // If two channels share a minima, which colour do you pick?
-	
-const CONTENT_BOX = {
-	VIEWBOX: 1, // The size is based on the viewbox
-	BOUNDS: 2   // The size is based on the poly bounds
-};
-
-const SCALING = {
-	FIT: 1,    // The content box fits inside the image and expands outwards
-	COVER: 2,  // The content box covers the image and shrinks inwards
-	STRETCH: 3 // The content box is left unchanged, sretching the content
-};
-
-const ASPECT = {
-	Y_X: 0, // y/x
-	X_Y: 1  // x/y
-};
-
-const PLACEMENT_CONTENTBOX = CONTENT_BOX.BOUNDS; // What boundary is fit into the image?
-const PLACEMENT_ASPECT_FIXED = false; // Should the image should a fixed aspect?
-const PLACEMENT_ASPECT_MODE = ASPECT.Y_X; // Is the aspect a x/y or y/x ratio?
-const PLACEMENT_ASPECT = 1; // The aspect ratio of the image (if fixed)
-const PLACEMENT_SCALING = SCALING.FIT; // How the content box is fit to the image
-const PLACEMENT_ALIGNMENT = new Point(0.5); // Where the content box is positioned when fitting
-const PLACEMENT_MARGIN = true; // Whether to add a margin for the outer range
-
-const BVH_ENABLED = true; // Enable BVH acceleration
-const BVH_LEAF_MAX_COUNT = 40; // 40 seems good for mostly straight SVGs, and 72 for mostly curved.
-
-const LABEL_UNKNOWN = -1;
-const LABEL_1 = 1;
-const LABEL_2 = 2;
-const LABEL_3 = 3;
-const LABEL_4 = 4;
-
-const GRAPH_LABELS = new Set([
-	LABEL_UNKNOWN,
-	LABEL_1,
-	LABEL_2,
-	LABEL_3,
-	LABEL_4
-]);
-
-const VISUALISATION_LABELS = new Map([
-	[LABEL_UNKNOWN, "oklch(0.719 0.0000   0.00)"],
-	[LABEL_1, "oklch(0.719 0.1635  59.72)"],
-	[LABEL_2, "oklch(0.719 0.1635 149.72)"],
-	[LABEL_3, "oklch(0.719 0.1635 239.72)"],
-	[LABEL_4, "oklch(0.719 0.1635 329.72)"]
-]);
-
-const CHANNEL_MAPPING = new Map([
-	[LABEL_1,0],
-	[LABEL_2,1],
-	[LABEL_3,2],
-	[LABEL_4,3],
-]);
-
-const SVG_ELEMENTS = ["PATH","ELLIPSE","CIRCLE","POLYGON","RECT","TEXT","G"];
-
-const ARG_COUNT = {
-	// Move (new subpath):
-	"M": 2, // x,y
-	// Line:
-	"L": 2, // x,y
-	// Horizontal line:
-	"H": 1, // x
-	// Vertical line:
-	"V": 1, // y
-	// Close path:
-	"Z": 0, 
-	// Cubic bezier: 
-	"C": 6, // c1x,c1y,c2x,c2y,x,y
-	// Cubic bezier (borrowed control): 
-	"S": 4, // c2x,x2y,x,y
-	// Quadratic bezier: 
-	"Q": 4, // cx,cy,x,y
-	// Quadratic bezier (borrowed control): 
-	"T": 2, // x,y
-	// Arc (ellipse):
-	"A": 7 // rx,ry,r,lf,sf,x,y
-}
-
-const RELATIVE_ARGS = ["m","l","h","v","z","c","s","q","t","a"];
-
-const FILL_RULES = {
-	nonzero: ClipperLib.PolyFillType.pftNonZero,
-	evenodd: ClipperLib.PolyFillType.pftEvenOdd,
-};
-
-let viewbox = undefined;
-let svg_size = undefined;
-
 function Clamp01(value)
 {
 	if (value <= 0)
@@ -211,32 +89,6 @@ function AddPaths(element, path_string, fill_colour, stroke_colour, stroke_width
 	element.appendChild(path);   
 }
 
-// Converts a list of vertices to a JsClipper
-// compatible format.
-function PointsToCPoly(points)
-{
-	const SCALE = WORKING_SCALE / (svg_size * 0.5);
-	return points
-	.map(path => path
-		.map(point => ({
-			X: (point.X - viewbox.center.X) * SCALE,
-			Y: (point.Y - viewbox.center.Y) * SCALE
-		}))
-	);
-}
-
-function CPolyToPoints(cpoly)
-{
-	const SCALE = (svg_size * 0.5) / WORKING_SCALE;
-	return cpoly
-	.map(path => path
-		.map(point => ({
-			X: point.X * SCALE + viewbox.center.X,
-			Y: point.Y * SCALE + viewbox.center.Y,
-		}))
-	);
-}
-
 // Converts Paths to an SVG path string
 function PathsToString(paths)
 {
@@ -283,14 +135,261 @@ function GetPathsCenter(paths)
 	return count > 0 ? sum.ScaleInv(count) : undefined;
 }
 
+// Converts the points in a layer's polygon into a flat array of edge objects.
+function LayerToEdges(layer)
+{
+	return layer.poly
+	.map(path => path
+		.map((point, i, arr) => {
+			const next = arr[(i + 1) % arr.length];
+			// Create edges from points
+			return new Edge(
+				point,
+				next,
+				layer,
+				new Bounds(
+					Point.Min(point, next),
+					Point.Max(point, next)
+				)
+			);
+		})
+	)
+	.flat(1);
+}
+
+class RSDFConverter {
+static BLEED = {
+	EXTEND: 0, // Pick the true closest channel
+	AVERAGE: 1, // Average the minimum channels' colours
+	MARK: 2 // Ignore the input colour and mark with an error colour
+};
+
+static CONTENT_BOX = {
+	VIEWBOX: 1, // The size is based on the viewbox
+	BOUNDS: 2   // The size is based on the poly bounds
+};
+
+static SCALING = {
+	FIT: 1,    // The content box fits inside the image and expands outwards
+	COVER: 2,  // The content box covers the image and shrinks inwards
+	STRETCH: 3 // The content box is left unchanged, sretching the content
+};
+
+static ASPECT = {
+	Y_X: 0, // y/x
+	X_Y: 1  // x/y
+};
+
+static LABEL_UNKNOWN = -1;
+static LABEL_1 = 1;
+static LABEL_2 = 2;
+static LABEL_3 = 3;
+static LABEL_4 = 4;
+
+static GRAPH_LABELS = new Set([
+	RSDFConverter.LABEL_UNKNOWN,
+	RSDFConverter.LABEL_1,
+	RSDFConverter.LABEL_2,
+	RSDFConverter.LABEL_3,
+	RSDFConverter.LABEL_4
+]);
+
+static VISUALISATION_LABELS = new Map([
+	[RSDFConverter.LABEL_UNKNOWN, "oklch(0.719 0.0000   0.00)"],
+	[RSDFConverter.LABEL_1, "oklch(0.719 0.1635  59.72)"],
+	[RSDFConverter.LABEL_2, "oklch(0.719 0.1635 149.72)"],
+	[RSDFConverter.LABEL_3, "oklch(0.719 0.1635 239.72)"],
+	[RSDFConverter.LABEL_4, "oklch(0.719 0.1635 329.72)"]
+]);
+
+static CHANNEL_MAPPING = new Map([
+	[RSDFConverter.LABEL_1,0],
+	[RSDFConverter.LABEL_2,1],
+	[RSDFConverter.LABEL_3,2],
+	[RSDFConverter.LABEL_4,3],
+]);
+
+static SVG_ELEMENTS = ["PATH","ELLIPSE","CIRCLE","POLYGON","RECT","TEXT","G"];
+
+static PATH_ARG_COUNT = {
+	// Move (new subpath):
+	"M": 2, // x,y
+	// Line:
+	"L": 2, // x,y
+	// Horizontal line:
+	"H": 1, // x
+	// Vertical line:
+	"V": 1, // y
+	// Close path:
+	"Z": 0, 
+	// Cubic bezier: 
+	"C": 6, // c1x,c1y,c2x,c2y,x,y
+	// Cubic bezier (borrowed control): 
+	"S": 4, // c2x,x2y,x,y
+	// Quadratic bezier: 
+	"Q": 4, // cx,cy,x,y
+	// Quadratic bezier (borrowed control): 
+	"T": 2, // x,y
+	// Arc (ellipse):
+	"A": 7 // rx,ry,r,lf,sf,x,y
+}
+
+static RELATIVE_ARGS = ["m","l","h","v","z","c","s","q","t","a"];
+
+static FILL_RULES = {
+	nonzero: ClipperLib.PolyFillType.pftNonZero,
+	evenodd: ClipperLib.PolyFillType.pftEvenOdd,
+};
+
+constructor()
+{
+	this.size = Math.pow(2,8); // Size of rendered sdf
+	this.render_colour = true; // Whether the SDF should render the image colour
+	this.render_regions = false; // Whether to set distances to exclusively the minima. Good for debugging, finding doubles, making colour maps by hand...
+	this.render_falsecolour = false; // Whether the SDF should render with false colour (fully opaque within 3 channels)
+	
+	this.inner_px = -1; // Pixels relative to size of image
+	this.outer_px = 1; // Pixels relative to size of image
+	this.perpendicular = false; // Whether distance should be perpendicular rather than euclidean
+	this.inverted = false; // Whether to map distances from [0,1] to [1,0]
+	
+	this.background_enabled = true;
+	this.background_colour = new RGB(0,0,0,0);
+	this.bleed_mode = RSDFConverter.BLEED.EXTEND; // If two channels share a minima, which colour do you pick?
+	this.bleed_colour = new RGB(1,0,1,1);
+	this.invalid_colour = new RGB(1,0,1,1);
+	this.bit_depth = 8;
+	this.linear_enabled = false;
+	
+	this.content_box = RSDFConverter.CONTENT_BOX.BOUNDS; // What boundary is fit into the image?
+	this.fixed_aspect = false; // Should the image should a fixed aspect?
+	this.aspect_mode = RSDFConverter.ASPECT.Y_X; // Is the aspect a x/y or y/x ratio?
+	this.aspect = 1; // The aspect ratio of the image (if fixed)
+	this.scaling = RSDFConverter.SCALING.FIT; // How the content box is fit to the image
+	this.alignment_x = 0.5; // Where the content box is positioned when fitting
+	this.alignment_y = 0.5;
+	this.margin = true; // Whether to add a margin for the outer range
+	
+	this.bvh_enabled = true; // Enable BVH acceleration
+	this.bvh_leaf_size = 40; // 40 seems good for mostly straight SVGs, and 72 for mostly curved.
+	
+	this.working_scale = Math.pow(2,24);
+	this.poly_delta = Math.pow(2,-9);
+	this.cleanup_delta = Math.pow(2,-20);
+	this.min_area = Math.pow(2,-18);
+	
+	this.max_distance = Math.pow(2,-10);
+	this.angle_steps = Math.pow(2,8);
+	this.graph_thickness = Math.pow(2,-11);
+	
+	this.viewbox = new Bounds();
+}
+
+Copy()
+{
+	const output = new RSDFConverter();
+	
+	output.size = this.size;
+	output.render_colour = this.render_colour;
+	output.render_regions = this.render_regions;
+	output.render_falsecolour = this.render_falsecolour;
+	output.inner_px = this.inner_px;
+	output.outer_px = this.outer_px;
+	output.perpendicular = this.perpendicular;
+	output.inverted = this.inverted;
+	output.background_enabled = this.background_enabled;
+	output.background_colour = this.background_colour.Copy();
+	output.bleed_mode = this.bleed_mode;
+	output.bleed_colour = this.bleed_colour.Copy();
+	output.invalid_colour = this.invalid_colour.Copy();
+	output.bit_depth = this.bit_depth;
+	output.linear_enabled = this.linear_enabled;
+	output.content_box = this.content_box;
+	output.fixed_aspect = this.fixed_aspect;
+	output.aspect_mode = this.aspect_mode;
+	output.aspect = this.aspect;
+	output.scaling = this.scaling;
+	output.alignment_x = this.alignment_x;
+	output.alignment_y = this.alignment_y;
+	output.margin = this.margin;
+	output.bvh_enabled = this.bvh_enabled;
+	output.bvh_leaf_size = this.bvh_leaf_size;
+	output.working_scale = this.working_scale;
+	output.poly_delta = this.poly_delta;
+	output.cleanup_delta = this.cleanup_delta;
+	output.min_area = this.min_area;
+	output.max_distance = this.max_distance;
+	output.angle_steps = this.angle_steps;
+	output.graph_thickness = this.graph_thickness;
+	output.viewbox = this.viewbox.Copy();
+	
+	return output;
+}
+
+ImportIsClean(old_settings)
+{
+	return this.background_enabled == old_settings.background_enabled &&
+		(!this.background_enabled || RGB.Equal(this.background_colour, old_settings.background_colour)) &&
+		this.working_scale == old_settings.working_scale &&
+		this.poly_delta == old_settings.poly_delta &&
+		this.cleanup_delta == old_settings.cleanup_delta &&
+		this.min_area == old_settings.min_area &&
+		this.max_distance == old_settings.max_distance &&
+		this.angle_steps == old_settings.angle_steps &&
+		Bounds.Equal(this.viewbox, old_settings.viewbox);
+}
+
+get svg_size() {
+	return Math.max(this.viewbox.width, this.viewbox.height);
+}
+
+get alignment() {
+	return new Point(
+		this.alignment_x,
+		this.alignment_y
+	);
+}
+
+get max_colour_value() {
+	return (1 << this.bit_depth) - 1;
+}	
+
+// Converts a list of vertices to a JsClipper
+// compatible format.
+PointsToCPoly(points)
+{
+	const SCALE = this.working_scale / (this.svg_size * 0.5);
+	return points
+	.map(path => path
+		.map(point => ({
+			X: (point.X - this.viewbox.center.X) * SCALE,
+			Y: (point.Y - this.viewbox.center.Y) * SCALE
+		}))
+	);
+}
+
+CPolyToPoints(cpoly)
+{
+	const SCALE = (this.svg_size * 0.5) / this.working_scale;
+	return cpoly
+	.map(path => path
+		.map(point => ({
+			X: point.X * SCALE + this.viewbox.center.X,
+			Y: point.Y * SCALE + this.viewbox.center.Y,
+		}))
+	);
+}
+
 // Takes an svg as segments, and converts them
 // to a list of subpath polygon vertex lists.
 // Points are Point objects.
 // Returns a path list of subpath lists of points.
-function SegmentsToPoints(segments)
+SegmentsToPoints(segments)
 {
 	if (segments.length == 0)
 		return [];
+
+	const POLY_DELTA = this.poly_delta * this.svg_size;
 
 	let curPath = [];
 	let rPoints = [curPath];
@@ -321,11 +420,11 @@ function SegmentsToPoints(segments)
 		let type = segment.type;
 		let upper_type = type.toUpperCase();
 
-		if (!(upper_type in ARG_COUNT))
+		if (!(upper_type in RSDFConverter.PATH_ARG_COUNT))
 			throw Error(`SegmentsToPoints: Unknown command '${type}'!`);
 
 		let args = segment.values.length;
-		let req_args = ARG_COUNT[upper_type];
+		let req_args = RSDFConverter.PATH_ARG_COUNT[upper_type];
 
 		if (args != req_args) 
 			throw Error(`SegmentsToPoints: Improper command args! (got ${args} for '${type}', expected ${req_args})`);
@@ -419,7 +518,7 @@ function SegmentsToPoints(segments)
 		curve.setAttribute("d",d);
 
 		// Some malformed geometry fails on tiny curves
-		if (Point.Distance(lastPoint, nextPoint) <= POLY_STEP * svg_size)
+		if (Point.Distance(lastPoint, nextPoint) <= POLY_DELTA)
 			return;
 
 		let length = curve.getTotalLength();
@@ -427,7 +526,7 @@ function SegmentsToPoints(segments)
 		if (length < 0)
 			throw Error(`SegmentsToPoints: Length of curve is '${length}'! (${segments[i].type + segments[i].values.join(" ")})`);
 
-		let edges = Math.ceil(length / (POLY_STEP * svg_size));
+		let edges = Math.ceil(length / POLY_DELTA);
 		let step = length / edges;
 
 		// Sample points along curve to create a polygon
@@ -446,7 +545,7 @@ function SegmentsToPoints(segments)
 	return SimplifyPaths(rPoints);
 }
 
-function SVGCircleToPoints(circle)
+SVGCircleToPoints(circle)
 {
 	let r = circle.getAttribute("r");
 
@@ -464,10 +563,10 @@ function SVGCircleToPoints(circle)
 		{type: "a", values: [r,r,0,0,1,-2*r,0]}
 	];
 
-	return SegmentsToPoints(segments);
+	return this.SegmentsToPoints(segments);
 }
 
-function SVGEllipseToPoints(ellipse)
+SVGEllipseToPoints(ellipse)
 {
 	let rx = ellipse.getAttribute("rx");
 	let ry = ellipse.getAttribute("ry");
@@ -489,10 +588,10 @@ function SVGEllipseToPoints(ellipse)
 		{type: "a", values: [rx,ry,0,0,1,-2*rx,0]}
 	];
 
-	return SegmentsToPoints(segments);
+	return this.SegmentsToPoints(segments);
 }
 
-function SVGRectToPoints(rect)
+SVGRectToPoints(rect)
 {
 	let x = Number(rect.getAttribute("x") ?? 0);
 	let y = Number(rect.getAttribute("y") ?? 0);
@@ -523,55 +622,55 @@ function SVGRectToPoints(rect)
 		{type: "a", values: [rx,ry,0,0,1,rx,-ry]}
 	];
 
-	return SegmentsToPoints(segments);
+	return this.SegmentsToPoints(segments);
 }
 
-function SVGPathToPoints(path)
+SVGPathToPoints(path)
 {
-	return SegmentsToPoints(path.getPathData());
+	return this.SegmentsToPoints(path.getPathData());
 }
 
-function SVGElementToPoints(element)
+SVGElementToPoints(element)
 {
 	let tag = element.tagName.toUpperCase();
 	switch(tag)
 	{
-		case "RECT": return SVGRectToPoints(element);
-		case "PATH": return SVGPathToPoints(element);
-		case "CIRCLE": return SVGCircleToPoints(element);
-		case "ELLIPSE": return SVGEllipseToPoints(element);
+		case "RECT": return this.SVGRectToPoints(element);
+		case "PATH": return this.SVGPathToPoints(element);
+		case "CIRCLE": return this.SVGCircleToPoints(element);
+		case "ELLIPSE": return this.SVGEllipseToPoints(element);
 	}
 	throw Error(`SVGElementToPoints: Unknown element tag '${element.tagName}'`);
 }
 
 // Takes an svg path as a string, and converts
 // it to a format usable by JsClipper.
-function SegmentsToCPoly(segments)
+SegmentsToCPoly(segments)
 {
-	return PointsToCPoly(
-		SegmentsToPoints(segments)
+	return this.PointsToCPoly(
+		this.SegmentsToPoints(segments)
 	);
 }
 
 // Takes an svg path as an element, and converts
 // it to a format usable by JsClipper.
-function PathToCPoly(path)
+PathToCPoly(path)
 {
-	return SegmentsToCPoly(
+	return this.SegmentsToCPoly(
 		path.getPathData({normalize: true})
 	);
 }
 
 // Takes an svg path as an ID, and converts
 // it to a format usable by JsClipper.
-function IdToCPoly(id)
+IdToCPoly(id)
 {
-	return PathToCPoly(
+	return this.PathToCPoly(
 		document.getElementById(id)
 	);
 }
 
-function SVGExtractGraphics(element, matrix = undefined, root = element)
+SVGExtractGraphics(element, matrix = undefined, root = element)
 {
 	return [...element.children]
 	.map(child => ({element: child}))
@@ -579,7 +678,7 @@ function SVGExtractGraphics(element, matrix = undefined, root = element)
 		const tag = e.element.tagName.toUpperCase();
 
 		// Unknown element
-		if (!SVG_ELEMENTS.includes(tag))
+		if (!RSDFConverter.SVG_ELEMENTS.includes(tag))
 			return false;
 
 		const computed_style = window.getComputedStyle(e.element);
@@ -617,7 +716,7 @@ function SVGExtractGraphics(element, matrix = undefined, root = element)
 		{
 			e.opacity = opacity;
 			e.blend_mode = blend_mode;
-			e.children = SVGExtractGraphics(e.element, e.matrix, root);
+			e.children = this.SVGExtractGraphics(e.element, e.matrix, root);
 
 			if (e.children.length == 0)
 				return false;
@@ -643,7 +742,7 @@ function SVGExtractGraphics(element, matrix = undefined, root = element)
 		if (!["PATH","RECT","CIRCLE","ELLIPSE"].includes(tag))
 			return false;
 		
-		e.points = SVGElementToPoints(e.element);
+		e.points = this.SVGElementToPoints(e.element);
 
 		if (e.points.flat(1).length == 0)
 			return false;
@@ -659,11 +758,11 @@ function SVGExtractGraphics(element, matrix = undefined, root = element)
 		}
 
 		const _fill_rule = GetAttributeOrStyle(e.element, "fill-rule");
-		const fill_rule = FILL_RULES[_fill_rule] ?? FILL_RULES.nonzero;
+		const fill_rule = RSDFConverter.FILL_RULES[_fill_rule] ?? RSDFConverter.FILL_RULES.nonzero;
 
-		e.poly = PointsToCPoly(e.points);
+		e.poly = this.PointsToCPoly(e.points);
 		e.poly = ClipperLib.Clipper.SimplifyPolygons(e.poly, fill_rule);
-		e.poly = ClipperLib.Clipper.CleanPolygons(e.poly, CLEANUP_DELTA * WORKING_SCALE);
+		e.poly = ClipperLib.Clipper.CleanPolygons(e.poly, this.cleanup_delta * this.working_scale);
 
 		if (e.poly.flat(1).length == 0)
 			return false;
@@ -685,7 +784,7 @@ function SVGExtractGraphics(element, matrix = undefined, root = element)
 			opacity,
 			blend_mode,
 			root,
-			COLOUR_LINEAR
+			this.linear_enabled
 		);
 
 		// TODO: Respect stroke data by using jsclipper offset functions, and difference clipping
@@ -706,21 +805,23 @@ function SVGExtractGraphics(element, matrix = undefined, root = element)
 }
 
 // Takes transparent layers and composites them onto layers beneath
-function FlattenGraphicsToLayers(graphics, background=undefined, is_root=true)
+FlattenGraphicsToLayers(graphics, is_root=true)
 {
 	if (is_root)
 		console.time("FlattenGraphicsToLayers");
 
-	const background_paint = background ? new PaintConstant(
-		background.Copy()
-	) : undefined;
+	const background_paint = is_root && this.background_enabled
+		? new PaintConstant(
+			this.background_colour.Copy()
+		)
+		: undefined;
 
 	graphics = graphics
 	.map(graphic => {
 		if (!graphic.group)
 			return graphic;
 
-		const children = FlattenGraphicsToLayers(graphic.children,undefined,false);
+		const children = this.FlattenGraphicsToLayers(graphic.children,false);
 		if (graphic.blend_mode != BLEND_MODE.NORMAL)
 			children.forEach(child =>
 				child.paint.blend_mode = graphic.blend_mode
@@ -732,7 +833,7 @@ function FlattenGraphicsToLayers(graphics, background=undefined, is_root=true)
 
 	let clipper = new ClipperLib.Clipper();
 
-	if (background)
+	if (background_paint)
 	{
 		graphics[0].paint = new PaintComposite(
 			[background_paint.Copy(), graphics[0].paint],
@@ -745,7 +846,7 @@ function FlattenGraphicsToLayers(graphics, background=undefined, is_root=true)
 	{
 		const covering = graphics[i];
 		// The paint this layer will take once it flattens onto the background
-		const covering_blend = background ? new PaintComposite(
+		const covering_blend = background_paint ? new PaintComposite(
 			[background_paint, covering.paint],
 			1,
 			BLEND_MODE.NORMAL
@@ -855,11 +956,11 @@ function FlattenGraphicsToLayers(graphics, background=undefined, is_root=true)
 
 	graphics = graphics.filter(layer => {
 		layer.poly = ClipperLib.Clipper.SimplifyPolygons(layer.poly, ClipperLib.PolyFillType.pftNonZero);
-		layer.poly = ClipperLib.Clipper.CleanPolygons(layer.poly, CLEANUP_DELTA * WORKING_SCALE);
+		layer.poly = ClipperLib.Clipper.CleanPolygons(layer.poly, this.cleanup_delta * this.working_scale);
 		return layer.poly.flat(1).length > 0
 	});
 
-	if (background === undefined)
+	if (!background_paint)
 	{
 		if (is_root)
 			console.timeEnd("FlattenGraphicsToLayers");
@@ -891,13 +992,13 @@ function FlattenGraphicsToLayers(graphics, background=undefined, is_root=true)
 	);
 					
 	background_poly = ClipperLib.Clipper.SimplifyPolygons(background_poly, ClipperLib.PolyFillType.pftNonZero);
-	background_poly = ClipperLib.Clipper.CleanPolygons(background_poly, CLEANUP_DELTA * WORKING_SCALE);
+	background_poly = ClipperLib.Clipper.CleanPolygons(background_poly, this.cleanup_delta * this.working_scale);
 
 	background_poly = background_poly
 	.filter(path => path.length > 0)
 	.filter(path =>
 		Math.abs(ClipperLib.Clipper.Area(path))
-		>= WORKING_SCALE * WORKING_SCALE * MIN_AREA
+		>= this.working_scale * this.working_scale * this.min_area
 	)
 	// Reverse the winding order to fill the outside; the inverse of the union
 	.map(path => path.reverse());
@@ -916,30 +1017,8 @@ function FlattenGraphicsToLayers(graphics, background=undefined, is_root=true)
 	return graphics;
 }
 
-// Converts the points in a layer's polygon into a flat array of edge objects.
-function LayerToEdges(layer)
-{
-	return layer.poly
-	.map(path => path
-		.map((point, i, arr) => {
-			const next = arr[(i + 1) % arr.length];
-			// Create edges from points
-			return new Edge(
-				point,
-				next,
-				layer,
-				new Bounds(
-					Point.Min(point, next),
-					Point.Max(point, next)
-				)
-			);
-		})
-	)
-	.flat(1);
-}
-
 // Takes layers and clips what each layer occludes from beneath
-function ClipOccludedLayers(layers)
+ClipOccludedLayers(layers)
 {
 	const clip_polys = [];
 
@@ -982,7 +1061,7 @@ function ClipOccludedLayers(layers)
 	.reverse();
 }
 
-function FuseLayerPaints(layers, consider_blend = true)
+FuseLayerPaints(layers, consider_blend = true)
 {
 	const paint_groups = new Map();
 	const clipper = new ClipperLib.Clipper();
@@ -1028,7 +1107,7 @@ function FuseLayerPaints(layers, consider_blend = true)
 		);
 
 		solution = ClipperLib.Clipper.SimplifyPolygons(solution, ClipperLib.PolyFillType.pftNonZero);
-		solution = ClipperLib.Clipper.CleanPolygons(solution, CLEANUP_DELTA * WORKING_SCALE);
+		solution = ClipperLib.Clipper.CleanPolygons(solution, this.cleanup_delta * this.working_scale);
 
 		return {
 			poly: solution,
@@ -1038,7 +1117,7 @@ function FuseLayerPaints(layers, consider_blend = true)
 	.filter(layer => layer.poly.flat(1).length > 0);
 }
 
-function SeparateLayerPolys(layers)
+SeparateLayerPolys(layers)
 {
 	const clipper = new ClipperLib.Clipper();
 
@@ -1104,20 +1183,20 @@ function SeparateLayerPolys(layers)
 	.flat(1);
 }
 
-function CullSmallLayers(layers)
+CullSmallLayers(layers)
 {
 	return layers.filter(layer => {
 		layer.poly = layer.poly.filter(
 			path => Math.abs(ClipperLib.Clipper.Area(path))
-				>= WORKING_SCALE * WORKING_SCALE * MIN_AREA
+				>= this.working_scale * this.working_scale * this.min_area
 		);
 		return layer.poly.flat(1).length > 0 &&
 			Math.abs(ClipperLib.JS.AreaOfPolygons(layer.poly))
-			>= WORKING_SCALE * WORKING_SCALE * MIN_AREA;
+			>= this.working_scale * this.working_scale * this.min_area;
 	});
 }
 
-function ConnectLayers(layers)
+ConnectLayers(layers)
 {
 	layers.forEach(layer =>
 		layer.connections = new Set()
@@ -1139,11 +1218,11 @@ function ConnectLayers(layers)
 					
 					const tangent_angle = Math.round(
 						(Math.atan2(v2.Y - v1.Y, v2.X - v1.X) / Math.PI + 2)
-						* ADJACENCY_ANGLE_STEPS
-					) % ADJACENCY_ANGLE_STEPS;
+						* this.angle_steps
+					) % this.angle_steps;
 					const tangent = new Point(
-						Math.cos(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI),
-						Math.sin(tangent_angle / ADJACENCY_ANGLE_STEPS * Math.PI)
+						Math.cos(tangent_angle / this.angle_steps * Math.PI),
+						Math.sin(tangent_angle / this.angle_steps * Math.PI)
 					);
 
 					const extent1 = tangent.DotProduct(v1);
@@ -1152,8 +1231,8 @@ function ConnectLayers(layers)
 					const normal = NormalFromTangent(tangent);
 					const offset = normal.DotProduct(v1.Add(v2)) * .5;
 
-					const plane1 = `${tangent_angle},${Math.floor(offset / (ADJACENCY_MAX_DISTANCE * WORKING_SCALE))}`;
-					const plane2 = `${tangent_angle},${Math.ceil(offset / (ADJACENCY_MAX_DISTANCE * WORKING_SCALE))}`;
+					const plane1 = `${tangent_angle},${Math.floor(offset / (this.max_distance * this.working_scale))}`;
+					const plane2 = `${tangent_angle},${Math.ceil(offset / (this.max_distance * this.working_scale))}`;
 
 					const segment = {
 						min: Math.min(extent1, extent2),
@@ -1198,7 +1277,7 @@ function ConnectLayers(layers)
 					continue;
 
 				if (Math.abs(v[i].offset - v[j].offset)
-					>= ADJACENCY_MAX_DISTANCE * WORKING_SCALE)
+					>= this.max_distance * this.working_scale)
 					continue;
 				
 				v[i].layer.connections.add(v[j].layer);
@@ -1211,24 +1290,24 @@ function ConnectLayers(layers)
 }
 
 // Finds labels that are not immediately blocked by neighbours
-function GetValidLayerLabels(layer)
+GetValidLayerLabels(layer)
 {
 	return new Set(
 		[...layer.neighbour_labels]
-		.filter(([k,v]) => k != LABEL_UNKNOWN && v == 0)
+		.filter(([k,v]) => k != RSDFConverter.LABEL_UNKNOWN && v == 0)
 		.map(([k,v]) => k)
 	);
 }
 
 // Finds labels that are not immediately blocked, and do not deplete
 // its cliques of possible labels.
-function GetSafeLayerLabels(layer)
+GetSafeLayerLabels(layer)
 {
-	const layer_labels = GetValidLayerLabels(layer);
+	const layer_labels = this.GetValidLayerLabels(layer);
 
 	// Connections of layer
 	const unknown_connections = new Set([...layer.connections]
-	.filter(connection => connection.graph_label != LABEL_UNKNOWN));
+	.filter(connection => connection.graph_label != RSDFConverter.LABEL_UNKNOWN));
 
 	if (layer_labels.size == 0 || unknown_connections.size == 0)
 		return layer_labels;
@@ -1239,7 +1318,7 @@ function GetSafeLayerLabels(layer)
 	// less labels available than there are nodes.
 	[...unknown_connections]
 	.forEach((c1, i, arr1) => {
-		const c1_labels = GetValidLayerLabels(c1);
+		const c1_labels = this.GetValidLayerLabels(c1);
 
 		// Connections of layer AND c1
 		const possible_c2 = new Set(
@@ -1248,7 +1327,7 @@ function GetSafeLayerLabels(layer)
 
 		[...possible_c2]
 		.forEach((c2, j, arr2) => {
-			const c2_labels = GetValidLayerLabels(c2);
+			const c2_labels = this.GetValidLayerLabels(c2);
 			const c12_labels = c1_labels.union(c2_labels);
 
 			// Connections of layer AND c1 AND c2
@@ -1258,7 +1337,7 @@ function GetSafeLayerLabels(layer)
 
 			[...possible_c3]
 			.forEach((c3, k, arr3) => {
-				const c3_labels = GetValidLayerLabels(c3);
+				const c3_labels = this.GetValidLayerLabels(c3);
 				const c123_labels = c12_labels.union(c3_labels);
 
 				// 4-clique neighbours (maximum) with only three labels
@@ -1280,7 +1359,7 @@ function GetSafeLayerLabels(layer)
 	return layer_labels.difference(connection_labels);
 }
 
-function LabelLayer(layer, label)
+LabelLayer(layer, label)
 {
 	if (layer.graph_label == label)
 		return;
@@ -1305,26 +1384,26 @@ function LabelLayer(layer, label)
 }
 
 // Add initial states and neighbour counts to layers
-function SetupGraph(layers)
+SetupGraph(layers)
 {
 	layers
 	.forEach(layer => {
-		layer.graph_label = LABEL_UNKNOWN;
+		layer.graph_label = RSDFConverter.LABEL_UNKNOWN;
 
 		layer.neighbour_labels = new Map(
-			[...GRAPH_LABELS]
+			[...RSDFConverter.GRAPH_LABELS]
 				.map(label => [label,0])
 		);
 
 		layer.neighbour_labels.set(
-			LABEL_UNKNOWN,
+			RSDFConverter.LABEL_UNKNOWN,
 			layer.connections.size
 		);
 	});
 }
 
 // Saves the state of a graph with mappings from layers to labels
-function GetGraphState(layers)
+GetGraphState(layers)
 {
 	return new Map(
 		layers.map(layer =>
@@ -1334,23 +1413,23 @@ function GetGraphState(layers)
 }
 
 // Resets a graph using a map from layers to original labels
-function ResetGraphState(initial_state)
+ResetGraphState(initial_state)
 {
 	[...initial_state.entries()]
 	.forEach(([layer, label]) =>
-		LabelLayer(layer, label)
+		this.LabelLayer(layer, label)
 	);
 }
 
 // Attempts to label a graph. To exhaust possibilities, this recurses
 // when a uncertain decision is made. Returns true if labelled, false if not,
 // and resets the graph when a labeling was not possible.
-function LabelGraph(layers)
+LabelGraph(layers)
 {
 	if (layers.length == 0)
 		return true;
 
-	const initial_state = GetGraphState(layers);
+	const initial_state = this.GetGraphState(layers);
 	const input = new Set(layers);
 	const trivial_groups = [];
 	let input_arr = [...input];
@@ -1364,16 +1443,16 @@ function LabelGraph(layers)
 		for (let i = 0; i < input.size; i++)
 		{
 			const layer = input_arr[i];
-			const possible_labels = GetSafeLayerLabels(layer);
+			const possible_labels = this.GetSafeLayerLabels(layer);
 
 			if (possible_labels.size == 0)
 			{
-				ResetGraphState(initial_state);
+				this.ResetGraphState(initial_state);
 				return false;
 			}
 			else if (possible_labels.size == 1)
 			{
-				LabelLayer(layer,[...possible_labels][0]);
+				this.LabelLayer(layer,[...possible_labels][0]);
 				
 				trivial.delete(layer);
 				input.delete(layer);
@@ -1385,7 +1464,7 @@ function LabelGraph(layers)
 			const unknown_neighbours = [...(
 				layer.connections.intersection(input)
 			)].filter(connection =>
-				connection.graph_label == LABEL_UNKNOWN
+				connection.graph_label == RSDFConverter.LABEL_UNKNOWN
 			);
 
 			if (possible_labels.size <= unknown_neighbours.length)
@@ -1418,7 +1497,7 @@ function LabelGraph(layers)
 		input.delete(most_connected);
 		input_arr = [...input];
 
-		const allowed_labels = [...GetSafeLayerLabels(
+		const allowed_labels = [...this.GetSafeLayerLabels(
 			most_connected
 		)];
 
@@ -1426,16 +1505,16 @@ function LabelGraph(layers)
 		{
 			if (allowed_labels.length == 0)
 			{
-				ResetGraphState(initial_state);
+				this.ResetGraphState(initial_state);
 				return false;
 			}
 
-			LabelLayer(
+			this.LabelLayer(
 				most_connected,
 				allowed_labels.pop()
 			);
 		}
-		while (!LabelGraph(input_arr));
+		while (!this.LabelGraph(input_arr));
 	}
 
 	// TODO: Add code to maximise distance between repeated labels
@@ -1444,15 +1523,15 @@ function LabelGraph(layers)
 	.forEach(group =>
 		[...group]
 		.sort((a,b) =>
-			a.neighbour_labels.get(LABEL_UNKNOWN) -
-			b.neighbour_labels.get(LABEL_UNKNOWN)
+			a.neighbour_labels.get(RSDFConverter.LABEL_UNKNOWN) -
+			b.neighbour_labels.get(RSDFConverter.LABEL_UNKNOWN)
 		)
 		.forEach(layer => {
-			const labels = [...GetValidLayerLabels(
+			const labels = [...this.GetValidLayerLabels(
 				layer
 			)];
 
-			LabelLayer(
+			this.LabelLayer(
 				layer,
 				// TODO: Replace random selection with
 				// deterministic distance-optimised label
@@ -1465,7 +1544,7 @@ function LabelGraph(layers)
 }
 
 // Signed distance to path as [Point...]
-function GetSignedDistanceToPath(
+GetSignedDistanceToPath(
 	path,
 	point,
 	layer,
@@ -1487,7 +1566,7 @@ function GetSignedDistanceToPath(
 }
 
 // Signed distance to polygon as [[Point...]...], and point as a Point
-function GetSignedDistanceToPolygon(
+GetSignedDistanceToPolygon(
 	polygon, 
 	point, 
 	layer, 
@@ -1495,7 +1574,7 @@ function GetSignedDistanceToPolygon(
 )
 {
 	return polygon.reduce((_prevDist, path) =>
-		GetSignedDistanceToPath(
+		this.GetSignedDistanceToPath(
 			path,
 			point,
 			layer,
@@ -1506,14 +1585,14 @@ function GetSignedDistanceToPolygon(
 }
 
 // Signed distance to layers as [{poly:[[Point...]...]...}...]
-function GetSignedDistanceToLayers(
+GetSignedDistanceToLayers(
 	layers,
 	point,
 	prevDist = undefined
 )
 {
 	return layers.reduce((_prevDist, layer) =>
-		GetSignedDistanceToPolygon(
+		this.GetSignedDistanceToPolygon(
 			layer.poly,
 			point,
 			layer,
@@ -1524,7 +1603,7 @@ function GetSignedDistanceToLayers(
 }
 
 // Samples an SDF field for layers assumed to have the same label
-function LayersToDistances(layers, mapping)
+LayersToDistances(layers, mapping)
 {
 	console.time("LayersToDistances");
 
@@ -1548,7 +1627,7 @@ function LayersToDistances(layers, mapping)
 				mapping.bounds.max.X
 			);
 
-			rowDat[col] = GetSignedDistanceToLayers(layers, sample);
+			rowDat[col] = this.GetSignedDistanceToLayers(layers, sample);
 		}
 	}
 
@@ -1560,7 +1639,7 @@ function LayersToDistances(layers, mapping)
 // Splits layers into differently labelled regions,
 // then renders an SDF for each one (up to four).
 // Returns a Map from Label constants to [[Dist...]...]
-function LabelledLayersToDistances(layers, mapping)
+LabelledLayersToDistances(layers, mapping)
 {
 	if (layers.length == 0)
 		return new Map();
@@ -1583,13 +1662,13 @@ function LabelledLayersToDistances(layers, mapping)
 		new Map()
 	);
 
-	if (!BVH_ENABLED)
+	if (!this.bvh_enabled)
 	{
 		// Create a different SDF for each label
 		var dists = new Map(
 			[...labelled_layers.entries()]
 			.map(([label,subLayers],index,arr) => {
-				const sdf = LayersToDistances(subLayers, mapping);
+				const sdf = this.LayersToDistances(subLayers, mapping);
 				
 				console.timeLog("LabelledLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
 
@@ -1613,7 +1692,7 @@ function LabelledLayersToDistances(layers, mapping)
 				const bvh = BVH.FromEdges(
 					edges,
 					Bounds.FromEdges(edges),
-					BVH_LEAF_MAX_COUNT
+					this.bvh_leaf_size
 				);
 
 				console.log(bvh.ToString(mapping.bounds));
@@ -1641,7 +1720,7 @@ function LabelledLayersToDistances(layers, mapping)
 	return dists;
 }
 
-function LayersCalculateVectors(layers)
+LayersCalculateVectors(layers)
 {
 	console.time("LayersCalculateVectors");
 
@@ -1672,11 +1751,10 @@ function LayersCalculateVectors(layers)
 	return layers;
 }
 
-function DistancesToSDFImage(
-		dists,
-		mapping,
-		perpendicular
-	)
+DistancesToSDFImage(
+	dists,
+	mapping
+)
 {
 	let data = new Array(mapping.size.X * mapping.size.Y * 4);
 
@@ -1684,15 +1762,15 @@ function DistancesToSDFImage(
 		data[i] = COLOUR_MAX_VALUE;
 
 	[...dists.entries()].forEach(([label,rows]) => {
-		if (label == LABEL_UNKNOWN)
+		if (label == RSDFConverter.LABEL_UNKNOWN)
 			return;
 
-		let index = CHANNEL_MAPPING.get(label);
+		let index = RSDFConverter.CHANNEL_MAPPING.get(label);
 
 		rows
 		.forEach(row => row
 			.forEach(sample => {
-				let dist = perpendicular
+				let dist = this.perpendicular
 					? sample.perpendicular
 					: sample.euclidean_signed;
 
@@ -1703,7 +1781,7 @@ function DistancesToSDFImage(
 						: 1
 					: 0;
 
-				data[index] = Math.round(dist * COLOUR_MAX_VALUE);
+				data[index] = Math.round(dist * this.max_colour_value);
 				index += 4;
 			})
 		)
@@ -1712,7 +1790,7 @@ function DistancesToSDFImage(
 	return data;
 }
 
-function DistancesToColourImage(
+DistancesToColourImage(
 	dists,
 	data,
 	mapping
@@ -1723,7 +1801,7 @@ function DistancesToColourImage(
 		return dists.get(label)[row][col]
 			.layer.paint.GetColour(sample)
 			// Radial gradients may produce undefined colours
-			?? SDF_COLOUR_INVALID_COLOUR;
+			?? this.invalid_colour;
 	}
 
 	function FromLinear(dists,label,row,col)
@@ -1731,10 +1809,10 @@ function DistancesToColourImage(
 		return dists.get(label)[row][col]
 			.layer.paint.GetColour(sample).FromLinear()
 			// Radial gradients may produce undefined colours
-			?? SDF_COLOUR_INVALID_COLOUR;
+			?? this.invalid_colour;
 	}
 
-	const ColourFromDists = COLOUR_LINEAR
+	const ColourFromDists = this.linear_enabled
 		? FromLinear
 		: FromGamma;
 
@@ -1752,10 +1830,10 @@ function DistancesToColourImage(
 		let colour_out;
 		for (let col = 0; col < mapping.size.X;
 			col++,
-			data_out[i++] = Math.round(colour_out.r * COLOUR_MAX_VALUE),
-			data_out[i++] = Math.round(colour_out.g * COLOUR_MAX_VALUE),
-			data_out[i++] = Math.round(colour_out.b * COLOUR_MAX_VALUE),
-			data_out[i++] = Math.round(colour_out.a * COLOUR_MAX_VALUE)
+			data_out[i++] = Math.round(colour_out.r * this.max_colour_value),
+			data_out[i++] = Math.round(colour_out.g * this.max_colour_value),
+			data_out[i++] = Math.round(colour_out.b * this.max_colour_value),
+			data_out[i++] = Math.round(colour_out.a * this.max_colour_value)
 		)
 		{
 			sample.X = Lerp(
@@ -1772,10 +1850,10 @@ function DistancesToColourImage(
 			const min = Math.min(r,g,b,a)
 
 			const min_channels = [
-				[r,LABEL_1],
-				[g,LABEL_2],
-				[b,LABEL_3],
-				[a,LABEL_4]
+				[r,RSDFConverter.LABEL_1],
+				[g,RSDFConverter.LABEL_2],
+				[b,RSDFConverter.LABEL_3],
+				[a,RSDFConverter.LABEL_4]
 			].filter(([v,l]) => dists.has(l) && v == min)
 			.map(([v,l]) => l);
 
@@ -1790,13 +1868,13 @@ function DistancesToColourImage(
 				continue;
 			}
 			
-			if (COLOUR_BLEED_MODE == BLEED.MARK)
+			if (this.bleed_mode == RSDFConverter.BLEED.MARK)
 			{
-				colour_out = COLOUR_BLEED_COLOUR;
+				colour_out = this.bleed_colour;
 				continue;
 			}
 			
-			if (COLOUR_BLEED_MODE == BLEED.AVERAGE)
+			if (this.bleed_mode == RSDFConverter.BLEED.AVERAGE)
 			{
 				colour_out = new RGB(0,0,0,0);
 
@@ -1809,7 +1887,7 @@ function DistancesToColourImage(
 						col
 					);
 
-					if (COLOUR_LINEAR)
+					if (this.linear_enabled)
 						sample_colour = sample_colour.ToLinear();
 
 					colour_out.r += sample_colour.r;
@@ -1823,7 +1901,7 @@ function DistancesToColourImage(
 				colour_out.b /= min_channels.length;
 				colour_out.a /= min_channels.length;
 
-				if (COLOUR_LINEAR)
+				if (this.linear_enabled)
 					colour_out = colour_out.FromLinear();
 
 				continue;
@@ -1847,17 +1925,17 @@ function DistancesToColourImage(
 
 			colour_out = min_obj.layer.paint.GetColour(sample);
 
-			if (COLOUR_LINEAR && colour_out)
+			if (this.linear_enabled && colour_out)
 				colour_out = colour_out.FromLinear();
 
-			colour_out ??= SDF_COLOUR_INVALID_COLOUR;
+			colour_out ??= OUTPUT_RENDER_this.invalid_colour;
 		}
 	}
 
 	return data_out;
 }
 
-function SaturateSDFImage(data)
+SaturateSDFImage(data)
 {
 	let data_out = [];
 
@@ -1868,21 +1946,21 @@ function SaturateSDFImage(data)
 		let b = data[i+2];
 		let a = data[i+3];
 		let min = Math.min(r,g,b,a);
-		data_out.push(r == min ? 0 : COLOUR_MAX_VALUE);
-		data_out.push(g == min ? 0 : COLOUR_MAX_VALUE);
-		data_out.push(b == min ? 0 : COLOUR_MAX_VALUE);
-		data_out.push(a == min ? 0 : COLOUR_MAX_VALUE);
+		data_out.push(r == min ? 0 : this.max_colour_value);
+		data_out.push(g == min ? 0 : this.max_colour_value);
+		data_out.push(b == min ? 0 : this.max_colour_value);
+		data_out.push(a == min ? 0 : this.max_colour_value);
 	}
 
 	return data_out;
 }
 
-function InvertSDFImage(data)
+InvertSDFImage(data)
 {
-	return data.map(v => COLOUR_MAX_VALUE - v);
+	return data.map(v => this.max_colour_value - v);
 }
 
-function FalseColourSDFImage(data)
+FalseColourSDFImage(data)
 {
 	let data_out = [];
 
@@ -1895,20 +1973,20 @@ function FalseColourSDFImage(data)
 		data_out.push(r * 2 / 4 + g * 2 / 4);
 		data_out.push(g * 2 / 4 + b * 2 / 4);
 		data_out.push(b * 1 / 4 + a * 3 / 4);
-		data_out.push(COLOUR_MAX_VALUE);
+		data_out.push(this.max_colour_value);
 	}
 
 	return data_out;
 }
 
-function GetImageMapping(layers)
+GetImageMapping(layers)
 {
-	let alignment = PLACEMENT_ALIGNMENT;
+	let alignment = this.alignment;
 	
-	if (PLACEMENT_CONTENTBOX == CONTENT_BOX.VIEWBOX)
+	if (this.content_box == RSDFConverter.CONTENT_BOX.VIEWBOX)
 	{
-		var box = viewbox.size;
-		var center = box.Multiply(PLACEMENT_ALIGNMENT).Add(viewbox.min);
+		var box = this.viewbox.size;
+		var center = box.Multiply(this.alignment).Add(this.viewbox.min);
 	}
 	else
 	{
@@ -1935,37 +2013,37 @@ function GetImageMapping(layers)
 	}
 	
 	// If the aspect isn't fixed then the image is scaled relative to the box
-	if (!PLACEMENT_ASPECT_FIXED)
+	if (!this.fixed_aspect)
 	{
-		let size = PLACEMENT_MARGIN
-			? SDF_SIZE - SDF_OUTER_RANGE * 2
-			: SDF_SIZE;
+		let size = this.margin
+			? this.size - this.outer_px * 2
+			: this.size;
 		
 		var img_size = new Point(size);
 		
 		if (box.X == box.Y)
-			var outer = box.X * SDF_OUTER_RANGE / size;
+			var outer = box.X * this.outer_px / size;
 		else if (box.X < box.Y) // Shrink image width
 		{
-			var outer = box.Y * SDF_OUTER_RANGE / size;
+			var outer = box.Y * this.outer_px / size;
 			img_size.X *= box.X / box.Y;
 		}
 		else // Shrink image height
 		{
-			var outer = box.X * SDF_OUTER_RANGE / size;
+			var outer = box.X * this.outer_px / size;
 			img_size.Y *= box.Y / box.X;
 		}
 		
-		if (PLACEMENT_MARGIN)
+		if (this.margin)
 		{
 			alignment = alignment
 				.Multiply(img_size)
-				.Add(new Point(SDF_OUTER_RANGE))
+				.Add(new Point(this.outer_px))
 			img_size = img_size
-				.Add(new Point(SDF_OUTER_RANGE * 2));
+				.Add(new Point(this.outer_px * 2));
 			alignment = alignment
 				.Divide(img_size);
-			box = box.Scale(SDF_SIZE / size);
+			box = box.Scale(this.size / size);
 		}
 		
 		img_size = img_size.Round();
@@ -1973,64 +2051,64 @@ function GetImageMapping(layers)
 	// Otherwise, the box is scaled relative to the image
 	else
 	{
-		if (PLACEMENT_ASPECT_MODE == ASPECT.X_Y)
+		if (this.aspect_mode == RSDFConverter.ASPECT.X_Y)
 			var img_size = new Point(
-				Math.round(SDF_SIZE * PLACEMENT_ASPECT),
-				SDF_SIZE
+				Math.round(this.size * this.aspect),
+				this.size
 			);
 		else
 			var img_size = new Point(
-				SDF_SIZE,
-				Math.round(SDF_SIZE * PLACEMENT_ASPECT)
+				this.size,
+				Math.round(this.size * this.aspect)
 			);
 		
-		if (PLACEMENT_SCALING == SCALING.FIT ||
-			PLACEMENT_SCALING == SCALING.COVER
+		if (this.scaling == RSDFConverter.SCALING.FIT ||
+			this.scaling == RSDFConverter.SCALING.COVER
 		)
 		{
 			const _img_size = img_size;
-			if (PLACEMENT_MARGIN)
+			if (this.margin)
 				img_size = img_size
-					.Subtract(new Point(2 * SDF_OUTER_RANGE));
+					.Subtract(new Point(2 * this.outer_px));
 
 			const w_ratio = box.X / img_size.X
 			const h_ratio = box.Y / img_size.Y;
 
 			if (w_ratio == h_ratio)
-				var outer = SDF_OUTER_RANGE * w_ratio;
-			else if ((PLACEMENT_SCALING == SCALING.FIT) == (w_ratio < h_ratio))
+				var outer = this.outer_px * w_ratio;
+			else if ((this.scaling == RSDFConverter.SCALING.FIT) == (w_ratio < h_ratio))
 			{
-				var outer = SDF_OUTER_RANGE * h_ratio;
+				var outer = this.outer_px * h_ratio;
 				box.X *= h_ratio / w_ratio;
 			}
 			else
 			{
-				var outer = SDF_OUTER_RANGE * w_ratio;
+				var outer = this.outer_px * w_ratio;
 				box.Y *= w_ratio / h_ratio;
 			}
 
-			if (PLACEMENT_MARGIN)
+			if (this.margin)
 			{
 				alignment = alignment
 					.Multiply(img_size)
-					.Add(new Point(SDF_OUTER_RANGE))
+					.Add(new Point(this.outer_px))
 					.Divide(_img_size);
-				box = new Point(2 * SDF_OUTER_RANGE)
+				box = new Point(2 * this.outer_px)
 					.Divide(img_size)
 					.Multiply(box)
 					.Add(box);
 				img_size = _img_size;
 			}
 		}
-		else if (PLACEMENT_MARGIN)
+		else if (this.margin)
 		{
 			const w_ratio = box.X / img_size.X;
 			const h_ratio = box.Y / img_size.Y;
 
 			if (w_ratio < h_ratio)
-				var outer = box.X * SDF_OUTER_RANGE / (img_size.X + 2 * SDF_OUTER_RANGE);
+				var outer = box.X * this.outer_px / (img_size.X + 2 * this.outer_px);
 			else
-				var outer = box.Y * SDF_OUTER_RANGE / (img_size.Y + 2 * SDF_OUTER_RANGE);
+				var outer = box.Y * this.outer_px / (img_size.Y + 2 * this.outer_px);
 
 			alignment = alignment
 				.Multiply(box)
@@ -2045,11 +2123,11 @@ function GetImageMapping(layers)
 		{
 			// This is arbitrary since outer is specified in px, but the scaling of each axis is different
 			// You could take the min here, or always choose X or Y
-			var outer = SDF_OUTER_RANGE * Math.max(box.X / img_size.X, box.Y / img_size.Y);
+			var outer = this.outer_px * Math.max(box.X / img_size.X, box.Y / img_size.Y);
 		}
 	}
 
-	const inner = outer * SDF_INNER_RANGE / SDF_OUTER_RANGE;
+	const inner = outer * this.inner_px / this.outer_px;
 
 	return {
 		bounds: new Bounds(
@@ -2066,4 +2144,5 @@ function GetImageMapping(layers)
 		outer: outer,
 		size: img_size
 	};
+}
 }
