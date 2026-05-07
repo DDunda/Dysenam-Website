@@ -1759,7 +1759,7 @@ class RSDFConverter {
 		let data = new Array(mapping.size.X * mapping.size.Y * 4);
 
 		for (let i = 0; i < data.length; i++)
-			data[i] = COLOUR_MAX_VALUE;
+			data[i] = this.max_colour_value;
 
 		[...dists.entries()].forEach(([label,rows]) => {
 			if (label == RSDFConverter.LABEL_UNKNOWN)
