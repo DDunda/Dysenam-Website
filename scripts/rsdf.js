@@ -1259,7 +1259,7 @@ function GetSafeLayerLabels(layer)
 	return layer_labels.difference(connection_labels);
 }
 
-function MarkLayerLabel(layer, label)
+function LabelLayer(layer, label)
 {
 	if (layer.graph_label == label)
 		return;
@@ -1317,7 +1317,7 @@ function ResetGraphState(initial_state)
 {
 	[...initial_state.entries()]
 	.forEach(([layer, label]) =>
-		MarkLayerLabel(layer, label)
+		LabelLayer(layer, label)
 	);
 }
 
@@ -1352,7 +1352,7 @@ function LabelGraph(layers)
 			}
 			else if (possible_labels.size == 1)
 			{
-				MarkLayerLabel(layer,[...possible_labels][0]);
+				LabelLayer(layer,[...possible_labels][0]);
 				
 				trivial.delete(layer);
 				input.delete(layer);
@@ -1409,7 +1409,7 @@ function LabelGraph(layers)
 				return false;
 			}
 
-			MarkLayerLabel(
+			LabelLayer(
 				most_connected,
 				allowed_labels.pop()
 			);
@@ -1431,7 +1431,7 @@ function LabelGraph(layers)
 				layer
 			)];
 
-			MarkLayerLabel(
+			LabelLayer(
 				layer,
 				// TODO: Replace random selection with
 				// deterministic distance-optimised label
