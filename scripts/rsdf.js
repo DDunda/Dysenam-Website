@@ -1503,9 +1503,9 @@ function GetSignedDistanceToLayers(
 }
 
 // Samples an SDF field for layers assumed to have the same label
-function LayersToSDF(layers, width, height, viewbox)
+function LayersToDistances(layers, width, height, viewbox)
 {
-	console.time("LayersToSDF");
+	console.time("LayersToDistances");
 	const sdf = new Array(height);
 	for (let row = 0; row < height; row++)
 	{
@@ -1526,7 +1526,7 @@ function LayersToSDF(layers, width, height, viewbox)
 		}
 	}
 
-	console.timeEnd("LayersToSDF");
+	console.timeEnd("LayersToDistances");
 
 	return sdf;
 }
@@ -1563,7 +1563,7 @@ function LabelledLayersToDistances(layers, width, height, viewbox)
 		var dists = new Map(
 			[...labelled_layers.entries()]
 			.map(([label,subLayers],index,arr) => {
-				const sdf = LayersToSDF(subLayers, width, height, viewbox);
+				const sdf = LayersToDistances(subLayers, width, height, viewbox);
 				
 				console.timeLog("LabelledLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
 
