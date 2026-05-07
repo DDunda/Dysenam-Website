@@ -133,21 +133,6 @@ function GetPolyClip(clipper, subject, clips, mode)
 	return result;
 }
 
-// Each argument is normalised (0-1) within the in-gamut range
-function oklch_normalised_wheel(luma, chroma, hue)
-{
-	return `oklch(${75.0153618202436 * luma}% ${0.12752921926631577 * chroma * luma} ${360 * hue})`;
-}
-
-// Each argument is normalised (0-1) within the in-gamut range
-function oklch_normalised_random(min_luma, max_luma, min_chroma, max_chroma, min_hue, max_hue)
-{
-	var rand_luma = min_luma != max_luma ? min_luma + (max_luma - min_luma) * Math.random() : max_luma;
-	var rand_chroma = min_chroma != max_chroma ? min_chroma + (max_chroma - min_chroma) * Math.random() : max_chroma;
-	var rand_hue =  min_hue != max_hue ? min_hue + (max_hue - min_hue) * Math.random() : max_hue;
-	return oklch_normalised_wheel(rand_luma, rand_chroma, rand_hue);
-}
-
 // Consider this a multiplication in the form:
 // ┌             ┐   ┌     ┐
 // │ m.a m.c m.e │   | v.0 │
@@ -2027,8 +2012,7 @@ function DisplayLayers()
 	layers
 	.forEach(layer => {
 		const fill = VISUALISATION_LABELS.get(layer.graph_label);
-		//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
-		//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
+		
 		AddPaths(
 			svg_overlay_group,
 			PathsToString(layer.points),
