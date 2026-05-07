@@ -1414,7 +1414,7 @@ function LabelGraph(layers)
 				allowed_labels.pop()
 			);
 		}
-		while (!this.LabelGraph(input_arr));
+		while (!LabelGraph(input_arr));
 	}
 
 	// TODO: Add code to maximise distance between repeated labels
