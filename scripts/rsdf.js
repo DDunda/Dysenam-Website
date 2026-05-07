@@ -33,33 +33,33 @@ const COLOUR_BLEED_MODE = BLEED.CLOSEST; // If two channels share a minima, whic
 const BVH_ENABLED = true; // Enable BVH acceleration
 const BVH_LEAF_MAX_COUNT = 40; // 40 seems good for mostly straight SVGs, and 72 for mostly curved.
 
-const UNKNOWN_COLOUR = -1;
-const COLOUR1_COLOUR = 1;
-const COLOUR2_COLOUR = 2;
-const COLOUR3_COLOUR = 3;
-const COLOUR4_COLOUR = 4;
+const LABEL_UNKNOWN = -1;
+const LABEL_1 = 1;
+const LABEL_2 = 2;
+const LABEL_3 = 3;
+const LABEL_4 = 4;
 
-const GRAPH_COLOURS = new Set([
-	UNKNOWN_COLOUR,
-	COLOUR1_COLOUR,
-	COLOUR2_COLOUR,
-	COLOUR3_COLOUR,
-	COLOUR4_COLOUR
+const GRAPH_LABELS = new Set([
+	LABEL_UNKNOWN,
+	LABEL_1,
+	LABEL_2,
+	LABEL_3,
+	LABEL_4
 ]);
 
-const VISUALISATION_COLOURS = new Map([
-	[UNKNOWN_COLOUR, "oklch(0.719 0.0000   0.00)"],
-	[COLOUR1_COLOUR, "oklch(0.719 0.1635  59.72)"],
-	[COLOUR2_COLOUR, "oklch(0.719 0.1635 149.72)"],
-	[COLOUR3_COLOUR, "oklch(0.719 0.1635 239.72)"],
-	[COLOUR4_COLOUR, "oklch(0.719 0.1635 329.72)"]
+const VISUALISATION_LABELS = new Map([
+	[LABEL_UNKNOWN, "oklch(0.719 0.0000   0.00)"],
+	[LABEL_1, "oklch(0.719 0.1635  59.72)"],
+	[LABEL_2, "oklch(0.719 0.1635 149.72)"],
+	[LABEL_3, "oklch(0.719 0.1635 239.72)"],
+	[LABEL_4, "oklch(0.719 0.1635 329.72)"]
 ]);
 
 const CHANNEL_MAPPING = new Map([
-	[COLOUR1_COLOUR,0],
-	[COLOUR2_COLOUR,1],
-	[COLOUR3_COLOUR,2],
-	[COLOUR4_COLOUR,3],
+	[LABEL_1,0],
+	[LABEL_2,1],
+	[LABEL_3,2],
+	[LABEL_4,3],
 ]);
 
 const SVG_ELEMENTS = ["PATH","ELLIPSE","CIRCLE","POLYGON","RECT","TEXT","G"];
@@ -1189,36 +1189,36 @@ function ConnectLayers(layers)
 	// TODO: Annotate distances between all regions
 }
 
-// Finds colours that are not immediately blocked by neighbours
-function GetValidLayerColours(layer)
+// Finds labels that are not immediately blocked by neighbours
+function GetValidLayerLabels(layer)
 {
 	return new Set(
-		[...layer.neighbour_colours]
-		.filter(([k,v]) => k != UNKNOWN_COLOUR && v == 0)
+		[...layer.neighbour_labels]
+		.filter(([k,v]) => k != LABEL_UNKNOWN && v == 0)
 		.map(([k,v]) => k)
 	);
 }
 
-// Finds colours that are not immediately blocked, and do not deplete
-// its cliques of possible colours.
-function GetSafeLayerColours(layer)
+// Finds labels that are not immediately blocked, and do not deplete
+// its cliques of possible labels.
+function GetSafeLayerLabels(layer)
 {
-	const layer_colours = GetValidLayerColours(layer);
+	const layer_labels = GetValidLayerLabels(layer);
 
 	// Connections of layer
 	const unknown_connections = new Set([...layer.connections]
-	.filter(connection => connection.graph_colour != UNKNOWN_COLOUR));
+	.filter(connection => connection.graph_label != LABEL_UNKNOWN));
 
-	if (layer_colours.size == 0 || unknown_connections.size == 0)
-		return layer_colours;
+	if (layer_labels.size == 0 || unknown_connections.size == 0)
+		return layer_labels;
 
-	let connection_colours = new Set();
+	let connection_labels = new Set();
 
-	// Block colours if using it would cause a clique to have
-	// less colours available than there are nodes.
+	// Block labels if using it would cause a clique to have
+	// less labels available than there are nodes.
 	[...unknown_connections]
 	.forEach((c1, i, arr1) => {
-		const c1_colours = GetValidLayerColours(c1);
+		const c1_labels = GetValidLayerLabels(c1);
 
 		// Connections of layer AND c1
 		const possible_c2 = new Set(
@@ -1227,8 +1227,8 @@ function GetSafeLayerColours(layer)
 
 		[...possible_c2]
 		.forEach((c2, j, arr2) => {
-			const c2_colours = GetValidLayerColours(c2);
-			const c12_colours = c1_colours.union(c2_colours);
+			const c2_labels = GetValidLayerLabels(c2);
+			const c12_labels = c1_labels.union(c2_labels);
 
 			// Connections of layer AND c1 AND c2
 			const possible_c3 = new Set(
@@ -1237,50 +1237,50 @@ function GetSafeLayerColours(layer)
 
 			[...possible_c3]
 			.forEach((c3, k, arr3) => {
-				const c3_colours = GetValidLayerColours(c3);
-				const c123_colours = c12_colours.union(c3_colours);
+				const c3_labels = GetValidLayerLabels(c3);
+				const c123_labels = c12_labels.union(c3_labels);
 
-				// 4-clique neighbours (maximum) with only three colours
-				if (c123_colours.size < 4)
-					connection_colours = connection_colours.union(c123_colours);
+				// 4-clique neighbours (maximum) with only three labels
+				if (c123_labels.size < 4)
+					connection_labels = connection_labels.union(c123_labels);
 			});
 
-			// 3-clique neighbours with only two colours
-			if (c12_colours.size < 3)
-				connection_colours = connection_colours.union(c12_colours);
+			// 3-clique neighbours with only two labels
+			if (c12_labels.size < 3)
+				connection_labels = connection_labels.union(c12_labels);
 		});
 
-		// 2-clique neighbour with only one colour
-		if (c1_colours.size < 2)
-			connection_colours = connection_colours.union(c1_colours);
+		// 2-clique neighbour with only one label
+		if (c1_labels.size < 2)
+			connection_labels = connection_labels.union(c1_labels);
 	});
 
-	// Return valid colours without those that break cliques
-	return layer_colours.difference(connection_colours);
+	// Return valid labels without those that break cliques
+	return layer_labels.difference(connection_labels);
 }
 
-function MarkLayerColour(layer, colour)
+function MarkLayerLabel(layer, label)
 {
-	if (layer.graph_colour == colour)
+	if (layer.graph_label == label)
 		return;
 
 	[...layer.connections]
 	.forEach(connection => {
-		connection.neighbour_colours.set(
-			layer.graph_colour,
-			connection.neighbour_colours.get(
-				layer.graph_colour
+		connection.neighbour_labels.set(
+			layer.graph_label,
+			connection.neighbour_labels.get(
+				layer.graph_label
 			) - 1
 		);
-		connection.neighbour_colours.set(
-			colour,
-			connection.neighbour_colours.get(
-				colour
+		connection.neighbour_labels.set(
+			label,
+			connection.neighbour_labels.get(
+				label
 			) + 1
 		);
 	});
 
-	layer.graph_colour = colour;
+	layer.graph_label = label;
 }
 
 // Add initial states and neighbour counts to layers
@@ -1288,43 +1288,43 @@ function SetupGraph(layers)
 {
 	layers
 	.forEach(layer => {
-		layer.graph_colour = UNKNOWN_COLOUR;
+		layer.graph_label = LABEL_UNKNOWN;
 
-		layer.neighbour_colours = new Map(
-			[...GRAPH_COLOURS]
-				.map(colour => [colour,0])
+		layer.neighbour_labels = new Map(
+			[...GRAPH_LABELS]
+				.map(label => [label,0])
 		);
 
-		layer.neighbour_colours.set(
-			UNKNOWN_COLOUR,
+		layer.neighbour_labels.set(
+			LABEL_UNKNOWN,
 			layer.connections.size
 		);
 	});
 }
 
-// Saves the state of a graph with mappings from layers to colours
+// Saves the state of a graph with mappings from layers to labels
 function GetGraphState(layers)
 {
 	return new Map(
 		layers.map(layer =>
-			[layer, layer.graph_colour]
+			[layer, layer.graph_label]
 		)
 	);
 }
 
-// Resets a graph using a map from layers to original colours
+// Resets a graph using a map from layers to original labels
 function ResetGraphState(initial_state)
 {
 	[...initial_state.entries()]
-	.forEach(([layer,colour]) =>
-		MarkLayerColour(layer, colour)
+	.forEach(([layer, label]) =>
+		MarkLayerLabel(layer, label)
 	);
 }
 
-// Attempts to colour a graph. To exhaust possibilities, this recurses
-// when a uncertain decision is made. Returns true if coloured, false if not,
-// and resets the graph when a colouring was not possible.
-function ColourGraph(layers)
+// Attempts to label a graph. To exhaust possibilities, this recurses
+// when a uncertain decision is made. Returns true if labelled, false if not,
+// and resets the graph when a labeling was not possible.
+function LabelGraph(layers)
 {
 	if (layers.length == 0)
 		return true;
@@ -1343,16 +1343,16 @@ function ColourGraph(layers)
 		for (let i = 0; i < input.size; i++)
 		{
 			const layer = input_arr[i];
-			const possible_colours = GetSafeLayerColours(layer);
+			const possible_labels = GetSafeLayerLabels(layer);
 
-			if (possible_colours.size == 0)
+			if (possible_labels.size == 0)
 			{
 				ResetGraphState(initial_state);
 				return false;
 			}
-			else if (possible_colours.size == 1)
+			else if (possible_labels.size == 1)
 			{
-				MarkLayerColour(layer,[...possible_colours][0]);
+				MarkLayerLabel(layer,[...possible_labels][0]);
 				
 				trivial.delete(layer);
 				input.delete(layer);
@@ -1364,10 +1364,10 @@ function ColourGraph(layers)
 			const unknown_neighbours = [...(
 				layer.connections.intersection(input)
 			)].filter(connection =>
-				connection.graph_colour == UNKNOWN_COLOUR
+				connection.graph_label == LABEL_UNKNOWN
 			);
 
-			if (possible_colours.size <= unknown_neighbours.length)
+			if (possible_labels.size <= unknown_neighbours.length)
 				continue;
 			
 			trivial.add(layer);
@@ -1397,45 +1397,45 @@ function ColourGraph(layers)
 		input.delete(most_connected);
 		input_arr = [...input];
 
-		const allowed_colours = [...GetSafeLayerColours(
+		const allowed_labels = [...GetSafeLayerLabels(
 			most_connected
 		)];
 
 		do
 		{
-			if (allowed_colours.length == 0)
+			if (allowed_labels.length == 0)
 			{
 				ResetGraphState(initial_state);
 				return false;
 			}
 
-			MarkLayerColour(
+			MarkLayerLabel(
 				most_connected,
-				allowed_colours.pop()
+				allowed_labels.pop()
 			);
 		}
-		while (!ColourGraph(input_arr));
+		while (!this.LabelGraph(input_arr));
 	}
 
-	// TODO: Add code to maximise distance between repeated colours
+	// TODO: Add code to maximise distance between repeated labels
 	trivial_groups
 	.reverse()
 	.forEach(group =>
 		[...group]
 		.sort((a,b) =>
-			a.neighbour_colours.get(UNKNOWN_COLOUR) -
-			b.neighbour_colours.get(UNKNOWN_COLOUR)
+			a.neighbour_labels.get(LABEL_UNKNOWN) -
+			b.neighbour_labels.get(LABEL_UNKNOWN)
 		)
 		.forEach(layer => {
-			const colours = [...GetValidLayerColours(
+			const labels = [...GetValidLayerLabels(
 				layer
 			)];
 
-			MarkLayerColour(
+			MarkLayerLabel(
 				layer,
 				// TODO: Replace random selection with
-				// deterministic distance-optimised colour
-				colours[Math.floor(Math.random() * colours.length)]
+				// deterministic distance-optimised label
+				labels[Math.floor(Math.random() * labels.length)]
 			);
 		})
 	);
@@ -1502,7 +1502,7 @@ function GetSignedDistanceToLayers(
 	);
 }
 
-// Samples an SDF field for layers assumed to be the same colour
+// Samples an SDF field for layers assumed to have the same label
 function LayersToSDF(layers, width, height, viewbox)
 {
 	console.time("LayersToSDF");
@@ -1531,26 +1531,26 @@ function LayersToSDF(layers, width, height, viewbox)
 	return sdf;
 }
 
-// Splits layers into differently coloured regions,
+// Splits layers into differently labelled regions,
 // then renders an SDF for each one (up to four).
-// Returns a Map from Colour constants to [[Dist...]...]
-function ColouredLayersToDistances(layers, width, height, viewbox)
+// Returns a Map from Label constants to [[Dist...]...]
+function LabelledLayersToDistances(layers, width, height, viewbox)
 {
 	if (layers.length == 0)
 		return new Map();
 	
-	console.time("ColouredLayersToDistances");
+	console.time("LabelledLayersToDistances");
 
-	// Separate layers into groups of single colours
-	const colouredLayers = layers.reduce(
+	// Separate layers into groups of single labels
+	const labelled_layers = layers.reduce(
 		(prev, layer) =>
 		{
-			const colour = layer.graph_colour;
+			const label = layer.graph_label;
 
-			if(!prev.has(colour))
-				prev.set(colour,[]);
+			if(!prev.has(label))
+				prev.set(label,[]);
 
-			prev.get(colour).push(layer);
+			prev.get(label).push(layer);
 
 			return prev;
 		},
@@ -1559,26 +1559,26 @@ function ColouredLayersToDistances(layers, width, height, viewbox)
 
 	if (!BVH_ENABLED)
 	{
-		// Create a different SDF for each colour
+		// Create a different SDF for each label
 		var dists = new Map(
-			[...colouredLayers.entries()]
-			.map(([colour,subLayers],index,arr) => {
+			[...labelled_layers.entries()]
+			.map(([label,subLayers],index,arr) => {
 				const sdf = LayersToSDF(subLayers, width, height, viewbox);
 				
-				console.timeLog("ColouredLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
+				console.timeLog("LabelledLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
 
-				return [colour, sdf];
+				return [label, sdf];
 			})
 		);
 	}
 	else
 	{	
-		console.time("ColouredLayersToDistances: BVH");
+		console.time("LabelledLayersToDistances: BVH");
 		
 		// Build a combined BVH for each set of layers
 		const bvhs = new Map(
-			[...colouredLayers.entries()]
-			.map(([colour,subLayers]) =>
+			[...labelled_layers.entries()]
+			.map(([label,subLayers]) =>
 			{
 				const edges = subLayers
 					.map(LayerToEdges)
@@ -1591,25 +1591,25 @@ function ColouredLayersToDistances(layers, width, height, viewbox)
 
 				console.log(bvh.ToString());
 
-				return [colour, bvh];
+				return [label, bvh];
 			})
 		);
-		console.timeEnd("ColouredLayersToDistances: BVH");
+		console.timeEnd("LabelledLayersToDistances: BVH");
 
 		var dists = new Map(
 			[...bvhs.entries()]
-			.map(([colour,bvh],index,arr) =>
+			.map(([label,bvh],index,arr) =>
 			{
 				const sdf = bvh.ToSDF(width, height, viewbox);
 				
-				console.timeLog("ColouredLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
+				console.timeLog("LabelledLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
 
-				return [colour, sdf];
+				return [label, sdf];
 			})
 		);
 	}
 
-	console.timeEnd("ColouredLayersToDistances");
+	console.timeEnd("LabelledLayersToDistances");
 
 	return dists;
 }
@@ -1659,11 +1659,11 @@ function DistancesToSDFImage(
 	for (let i = 0; i < width * height * 4; i++)
 		data.push(COLOUR_MAX_VALUE);
 
-	[...dists.entries()].forEach(([colour,rows]) => {
-		if (colour == UNKNOWN_COLOUR)
+	[...dists.entries()].forEach(([label,rows]) => {
+		if (label == LABEL_UNKNOWN)
 			return;
 
-		let index = CHANNEL_MAPPING.get(colour);
+		let index = CHANNEL_MAPPING.get(label);
 
 		rows
 		.forEach(row => row
@@ -1691,17 +1691,17 @@ function DistancesToColourImage(
 	height
 )
 {
-	function FromGamma(dists,colour,row,col)
+	function FromGamma(dists,label,row,col)
 	{
-		return dists.get(colour)[row][col]
+		return dists.get(label)[row][col]
 			.layer.paint.GetColour(sample)
 			// Radial gradients may produce undefined colours
 			?? SDF_COLOUR_INVALID_COLOUR;
 	}
 
-	function FromLinear(dists,colour,row,col)
+	function FromLinear(dists,label,row,col)
 	{
-		return dists.get(colour)[row][col]
+		return dists.get(label)[row][col]
 			.layer.paint.GetColour(sample).FromLinear()
 			// Radial gradients may produce undefined colours
 			?? SDF_COLOUR_INVALID_COLOUR;
@@ -1737,12 +1737,12 @@ function DistancesToColourImage(
 			const min = Math.min(r,g,b,a)
 
 			const min_channels = [
-				[r,COLOUR1_COLOUR],
-				[g,COLOUR2_COLOUR],
-				[b,COLOUR3_COLOUR],
-				[a,COLOUR4_COLOUR]
-			].filter(([v,c]) => dists.has(c) && v == min)
-			.map(([v,c]) => c);
+				[r,LABEL_1],
+				[g,LABEL_2],
+				[b,LABEL_3],
+				[a,LABEL_4]
+			].filter(([v,l]) => dists.has(l) && v == min)
+			.map(([v,l]) => l);
 
 			if (min_channels.length == 1)
 			{
@@ -1766,10 +1766,10 @@ function DistancesToColourImage(
 				colour_out = new RGB(0,0,0,0);
 
 				min_channels
-				.forEach(colour => {
+				.forEach(label => {
 					let sample_colour = ColourFromDists(
 						dists,
-						colour,
+						label,
 						row,
 						col
 					);
@@ -1799,8 +1799,8 @@ function DistancesToColourImage(
 
 			min_channels
 			.slice(1)
-			.forEach(colour => {
-				const obj = dists.get(colour)[row][col];
+			.forEach(label => {
+				const obj = dists.get(label)[row][col];
 				const dist = obj.euclidean_signed;
 
 				if (dist > min_dist)
@@ -1994,15 +1994,15 @@ function UpdateLayers(e)
 	else
 	{
 		layers.forEach(layer =>
-			MarkLayerColour(layer, UNKNOWN_COLOUR)
+			LabelLayer(layer, LABEL_UNKNOWN)
 		);
 	}
 
-	if (!ColourGraph(layers))
+	if (!LabelGraph(layers))
 	{
 		DisplayLayers();
 		layers = undefined;
-		console.error("Could not colour layers!");
+		console.error("Could not label layers!");
 		return;
 	}
 
@@ -2026,7 +2026,7 @@ function DisplayLayers()
 
 	layers
 	.forEach(layer => {
-		const fill = VISUALISATION_COLOURS.get(layer.graph_colour);
+		const fill = VISUALISATION_LABELS.get(layer.graph_label);
 		//let fill = oklch_normalised_wheel(1, 1, i / layers.length - .083 + (i % 2) * 0.5);
 		//let fill = oklch_normalised_random(1, 1, 0.5, 1, 0, 1);
 		AddPaths(
@@ -2097,7 +2097,7 @@ function RenderSDF()
 	const sdf_max = SDF_OUTER_RANGE * WORKING_SCALE / SDF_SIZE;
 
 	// Todo: Move processing to a web worker so the page does not lock up, and progress can be displayed
-	const dists = ColouredLayersToDistances(layers, sdf_width, sdf_height, viewbox);
+	const dists = LabelledLayersToDistances(layers, sdf_width, sdf_height, viewbox);
 
 	sdf_img = DistancesToSDFImage(
 		dists,
