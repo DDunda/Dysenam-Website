@@ -320,6 +320,11 @@ class Bounds
 // Base class for the BVH structure
 class BVH
 {
+	constructor(bounds)
+	{
+		this.bounds = bounds;
+	}
+
 	static CmpEdgesMinToMaxX(a,b)
 	{
 		const r = a.bounds.min.X - b.bounds.min.X;
@@ -481,13 +486,14 @@ class BVH
 	static CalculateForLayer(layer)
 	{
 		const edges = LayerToEdges(layer);
+		const bounds = Bounds.FromEdges(edges);
 
 		layer.bvh = BVH.FromEdges(
 			edges,
-			Bounds.FromEdges(edges)
+			bounds
 		);
 
-		console.log(layer.bvh.ToString());
+		console.log(layer.bvh.ToString(bounds));
 		
 		return layer;
 	}
@@ -661,8 +667,7 @@ class BVHBranch extends BVH
 {
 	constructor(bounds, branches)
 	{
-		super();
-		this.bounds = bounds;
+		super(bounds);
 		this.branches = branches;
 	}
 }
@@ -672,8 +677,7 @@ class BVHLeaf extends BVH
 {
 	constructor(bounds, edges)
 	{
-		super();
-		this.bounds = bounds;
+		super(bounds);
 		this.edges = edges;
 	}
 }
