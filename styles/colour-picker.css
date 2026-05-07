@@ -39,45 +39,22 @@ main {
 	vertical-align: middle;
 }
 
-#sliders > * > label
+#sliders label
 {
 	width: 2cm;
-	margin-right: 0.3cm;
-	text-align: right;
 }
 
-#sliders > * > input
+#sliders input
 {
 	margin-left: 0.3cm;
 }
 
-#sliders > * > input[type=range][class=slider]
+#sliders input[type=range][class=slider]
 {
 	width: 8cm;
 }
 
-#sliders > * > input[type=number]
-{
-	background-color: oklch(0.2 0.038 277.496);
-	padding: 0.3em 0.6em;
-	border: none;
-	width: 1.2cm;
-	border-radius: 0.1cm;
-	text-align: right;
-}
-
-.bare_box::-webkit-outer-spin-button,
-.bare_box::-webkit-inner-spin-button {
-	-webkit-appearance: none;
-	margin: 0;
-}
-
-.bare_box[type=number] {
-	-moz-appearance: textfield;
-	appearance: textfield;
-}
-
-#sliders > * > h3
+#sliders h3
 {
 	text-align: center !important;
 	width: 100% !important;
