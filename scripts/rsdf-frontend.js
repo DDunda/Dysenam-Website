@@ -11,6 +11,7 @@ function UploadSVG(e)
 	OUTPUT_REGIONS.style.display = "none";
 	OUTPUT_FALSECOLOUR.style.display = "none;"
 	OUTPUT_COLOUR.style.display = "none";
+	OUTPUT_PLACEHOLDER.style.display = "flex";
 	import_converter = undefined;
 
 	let file = e.target.files[0];
@@ -62,12 +63,15 @@ function UploadSVG(e)
 			viewbox_pos,
 			viewbox_pos.Add(viewbox_size)
 		);
+
+		INPUT_PLACEHOLDER.style.display = "none";
 	};
 
 	reader.onerror = () => {
 		showMessage("Error reading the file. Please try again.", "error");
 		INPUT_NAME.textContent = NO_FILE_TEXT;
 		INPUT_SVG.innerHTML = "";
+		INPUT_PLACEHOLDER.style.display = "flex";
 	};
 
 	reader.readAsText(file);
@@ -130,6 +134,8 @@ function RenderSDF()
 	);
 
 	img_converter = CONVERTER.Copy();
+
+	OUTPUT_PLACEHOLDER.style.display = "none";
 
 	if (CONVERTER.render_falsecolour)
 		setTimeout(RenderFalseColour,0);
@@ -378,9 +384,205 @@ function SaveSDFs(e)
 
 function AddCallbacks()
 {
+	const BOOLEANS = {
+		"output-colour": "render_colour",
+		"output-regions": "render_regions",
+		"output-falsecolour": "render_falsecolour",
+		"sdf-perpendicular": "perpendicular",
+		"sdf-inverted": "inverted",
+		"colour-background-enabled": "background_enabled",
+		"colour-linear": "linear_enabled",
+		"placement-fixed-aspect": "fixed_aspect",
+		"placement-margin": "margin",
+		"core-bvh": "bvh_enabled",
+	};
+
+	const ENUMS = {
+		"colour-bleedmode":
+		{
+			prop: "bleed_mode",
+			map: {
+				"extend": RSDFConverter.BLEED.EXTEND,
+				"average": RSDFConverter.BLEED.AVERAGE,
+				"mark": RSDFConverter.BLEED.MARK
+			},
+			default: "extend"
+		},
+		"colour-bitdepth":
+		{
+			prop: "bit_depth",
+			map: {
+				"8": 8,
+				"16": 16
+			},
+			default: "8"
+		},
+		"placement-contentbox":
+		{
+			prop: "content_box",
+			map: {
+				"viewbox": RSDFConverter.CONTENT_BOX.VIEWBOX,
+				"bounds": RSDFConverter.CONTENT_BOX.BOUNDS
+			},
+			default: "viewbox"
+		},
+		"placement-aspect-mode":
+		{
+			prop: "aspect_mode",
+			map: {
+				"yx": RSDFConverter.ASPECT.Y_X,
+				"xy": RSDFConverter.ASPECT.X_Y
+			},
+			default: "yx"
+		},
+		"placement-scaling":
+		{
+			prop: "scaling",
+			map: {
+				"fit": RSDFConverter.SCALING.FIT,
+				"cover": RSDFConverter.SCALING.COVER,
+				"stretch": RSDFConverter.SCALING.STRETCH,
+			},
+			default: "fit"
+		}
+	};
+
+	const COLOURS = {
+		"colour-background": "background_colour",
+		"settings-colour-bleed": "bleed_colour",
+		"settings-colour-invalid": "invalid_colour"
+	};
+
+	const NUM_SINGLES = {
+		"output-size": "size",
+		"sdf-inner": "inner_px",
+		"sdf-outer": "outer_px",
+		"placement-aspect": "aspect",
+		"placement-alignment-x": "alignment_x",
+		"placement-alignment-y": "alignment_y",
+		"core-leafsize": "bvh_leaf_size",
+	};
+
+	const NUM_PAIRS = {
+		"core-working-scale": {pow2:true,prop:"working_scale"},
+		"core-poly-delta": {pow2:true,prop:"poly_delta"},
+		"core-cleanup-delta": {pow2:true,prop:"cleanup_delta"},
+		"core-min-area": {pow2:true,prop:"min_area"},
+		"core-adjacency-distance": {pow2:true,prop:"max_distance"},
+		"core-adjacency-angle": {pow2:true,prop:"angle_steps"},
+		"core-adjacency-graphthickness": {pow2:true,prop:"graph_thickness"},
+	}
+
 	INPUT_UPLOAD.addEventListener("change", UploadSVG);
 	BUTTON_CONVERT.addEventListener("click", UpdateLayers);
 	BUTTON_SAVE.addEventListener("click", SaveSDFs);
+
+	const SETTINGS = document.getElementById("rsdf-settings");
+
+	[...Object.entries(BOOLEANS)]
+	.forEach(([id,prop]) => {
+		const ELEMENT = SETTINGS.querySelector(`input#${id}`);
+		
+		if (!ELEMENT)
+			return;
+		
+		ELEMENT.addEventListener("change", () => {
+			CONVERTER[prop] = ELEMENT.checked;
+		});
+	});
+
+	[...Object.entries(ENUMS)]
+	.forEach(([id,obj]) => {
+		const ELEMENT = SETTINGS.querySelector(`select#${id}`);
+		
+		if (!ELEMENT)
+			return;
+		
+		ELEMENT.addEventListener("change", () => {
+			CONVERTER[obj.prop] = obj.map[
+				ELEMENT.value in obj.map
+				? ELEMENT.value
+				: obj.default
+			];
+		});
+	});
+
+	[...Object.entries(COLOURS)]
+	.forEach(([id,prop]) => {
+		const RGB_ELEMENT = SETTINGS.querySelector(`input#${id}colour`);
+		const A_ELEMENT = SETTINGS.querySelector(`input#${id}alpha`);
+		
+		if (!RGB_ELEMENT || !A_ELEMENT)
+			return;
+		
+		RGB_ELEMENT.addEventListener("change", () => {
+			if (!RGB_ELEMENT.validity.valid)
+				return;
+			
+			const COLOUR = RGB.FromString(RGB_ELEMENT.value);
+			
+			CONVERTER[prop].r = COLOUR.r;
+			CONVERTER[prop].g = COLOUR.g;
+			CONVERTER[prop].b = COLOUR.b;
+		})
+		
+		A_ELEMENT.addEventListener("change", () => {
+			if (!A_ELEMENT.validity.valid)
+				return;
+			
+			CONVERTER[prop].a = Number(A_ELEMENT.value);
+		})
+	});
+
+	[...Object.entries(NUM_SINGLES)]
+	.forEach(([id,prop]) => {
+		const ELEMENT = SETTINGS.querySelector(`input#${id}`);
+		
+		if (!ELEMENT)
+			return;
+		
+		ELEMENT.addEventListener("change", () => {				
+			if (!ELEMENT.validity.valid)
+				return;
+			
+			CONVERTER[prop] = Number(ELEMENT.value);
+		});
+	});
+
+	[...Object.entries(NUM_PAIRS)]
+	.forEach(([id,obj]) => {
+		const SLIDER = SETTINGS.querySelector(`input#${id}-slider`);
+		const NUMBER = SETTINGS.querySelector(`input#${id}-number`);
+		
+		if (!SLIDER || !NUMBER)
+			return;
+		
+		SLIDER.addEventListener("change", () => {
+			if (!SLIDER.validity.valid)
+				return;
+			
+			NUMBER.value = SLIDER.value;
+			
+			CONVERTER[obj.prop] = obj.pow2
+				? Math.pow(2,Number(SLIDER.value))
+				: Number(SLIDER.value);					
+		});
+
+		SLIDER.addEventListener("input", () => {			
+			NUMBER.value = SLIDER.value;				
+		});
+		
+		NUMBER.addEventListener("change", () => {
+			if (!NUMBER.validity.valid)
+				return;
+			
+			SLIDER.value = NUMBER.value;
+			
+			CONVERTER[obj.prop] = obj.pow2
+				? Math.pow(2,Number(NUMBER.value))
+				: Number(NUMBER.value);					
+		});
+	});
 }
 
 const CONVERTER = new RSDFConverter();
@@ -391,12 +593,14 @@ const BUTTON_SAVE = document.getElementById("button-save");
 
 const INPUT_NAME = document.getElementById("input-name");
 const INPUT_SVG = document.getElementById("input-svg");
-const SETTINGS = document.getElementById("rsdf-settings");
+const INPUT_PLACEHOLDER = document.getElementById("input-placeholder");
+
 const OUTPUT = document.getElementById("rsdf-output");
 const OUTPUT_RSDF = OUTPUT.querySelector("#output-rsdf");
 const OUTPUT_FALSECOLOUR = OUTPUT.querySelector("#output-falsecolour");
 const OUTPUT_REGIONS = OUTPUT.querySelector("#output-saturated");
 const OUTPUT_COLOUR = OUTPUT.querySelector("#output-colour");
+const OUTPUT_PLACEHOLDER = OUTPUT.querySelector("#output-placeholder");
 
 const NO_FILE_TEXT = "No file selected (0 bytes)";
 

@@ -17,31 +17,186 @@
 	</head>
 	<body>
 		<script>include('/sections/header.html')</script>
-		<main>
-			<div class="frame" id="input-preview">
-				<div id="input-preview-name"></div>
-				<div id="input-preview-svg" style="width:50%"></div>
-				<canvas id="output-canvas" width="1024" height="1024" style="width: 50%; display: none"></canvas>
-				<canvas id="colour-canvas" width="1024" height="1024" style="width: 50%; display: none"></canvas>
-				<canvas id="falsecolour-canvas" width="1024" height="1024" style="width: 50%; display: none"></canvas>
-				<canvas id="saturated-canvas" width="1024" height="1024" style="width: 50%; display: none"></canvas>
-				<input id="upload-input" type="file" name="upload-input" accept="image/svg+xml"/>
+		<main style="width:100%;max-width:100%;margin-left:0;margin-right:0;">
+			<div class="columns">
+				<div class="frame" id="input-preview" style="position:relative">
+					<div style="width:100%">
+						<div id="input-name"></div>
+						<div id="input-placeholder" class="frame" style="width:100%;aspect-ratio:1;border-color:var(--colour_accent_secondary);margin-left:0;margin-right:0;display:flex;justify-content:center;align-items:center;">
+							<span>No SVG</span>
+						</div>
+						<div id="input-svg" style="width:100%"></div>
+					</div>
+					<input id="input-upload" type="file" name="input-upload" accept="image/svg+xml"/>
+				</div>
+				<div class="frame" id="rsdf-settings" style="position:relative;max-width:40rem;gap:var(--spacing-s)"
+					><div class="settings-box"
+						><div
+							><h3>Render</h3
+						></div
+						><div
+							><label for="output-size">Size</label
+							><input id="output-size" type="number" min="1" max="4096" step="1" value="256"
+						>px</div
+						><div
+							><label for="output-colour">Render colour?</label
+							><input id="output-colour" type="checkbox" checked
+						></div
+						><div
+							><label for="output-regions">Render regions?</label
+							><input id="output-regions" type="checkbox"
+						></div
+						><div
+							><label for="output-falsecolour">Render false-colour?</label
+							><input id="output-falsecolour" type="checkbox"
+						></div
+					></div
+					><div class="settings-box"
+						><div
+							><h3>SDF</h3
+						></div
+						><div
+							><label for="sdf-inner">SDF Range</label
+							><input id="sdf-inner" type="number" max="0" step="any" value="-1"
+							>&ndash;<input id="sdf-outer" type="number" min="0" step="any" value="1"
+						>px</div
+						><div
+							><label for="sdf-perpendicular">Perpendicular?</label
+							><input id="sdf-perpendicular" type="checkbox"
+						></div
+						><div
+							><label for="sdf-inverted">Inverted?</label
+							><input id="sdf-inverted" type="checkbox"
+						></div
+					></div
+					><div class="settings-box"
+						><div
+							><h3>Colour</h3
+						></div
+						><div
+							><label for="colour-background">Background</label
+							><input id="colour-background-enabled" type="checkbox" checked
+							><input id="colour-backgroundcolour" type="color" value="#000000"
+							><input id="colour-backgroundalpha" type="number" min="0" max="1" step="any" value="0"
+						></div
+						><div
+							><label for="colour-bleedmode">Bleed</label
+							><select id="colour-bleedmode"
+								><option value="extend" selected>Extend</option
+								><option value="average">Average</option
+								><option value="mark">Mark</option
+							></select
+							><input id="colour-bleedcolour" type="color" value="#FF00FF"
+							><input id="colour-bleedalpha" type="number" min="0" max="1" step="any" value="1"
+						></div
+						><div
+							><label for="colour-invalidcolour">Invalid fill</label
+							><input id="colour-invalidcolour" type="color" value="#FF00FF"
+							><input id="colour-invalidalpha" type="number" min="0" max="1" step="any" value="1"
+						></div
+						><div
+							><label for="colour-bitdepth">Bit depth</label
+							><select id="colour-bitdepth"
+								><option value="8" selected>8</option
+								><option value="16">16</option
+							></select
+						></div
+						><div
+							><label for="colour-linear">Linear?</label
+							><input id="colour-linear" type="checkbox"
+						></div
+					></div
+					><div class="settings-box"
+						><div
+							><h3>Placement</h3
+						></div
+						><div
+							><label for="placement-contentbox">Content box</label
+							><select id="placement-contentbox"
+								><option value="viewbox" selected>Viewbox</option
+								><option value="bounds">Bounding box</option
+							></select
+						></div
+						><div
+							><label for="placement-fixed-aspect">Fixed Aspect</label
+							><input id="placement-fixed-aspect" type="checkbox"
+							><select id="placement-aspect-mode"
+								><option value="yx" selected>y/x</option
+								><option value="xy">x/y</option
+							></select
+							><input id="placement-aspect" type="number" min="0" max="1" step="any" value="1"
+							><select id="placement-scaling"
+								><option value="fit" selected>Fit content</option
+								><option value="cover">Cover content</option
+								><option value="stretch">Stretch content</option
+							></select
+						></div
+						><div
+							><label for="placement-alignment-x">Alignment</label
+							><input id="placement-alignment-x" type="number" min="0" max="1" step="any" value="0.5"
+							><input id="placement-alignment-y" type="number" min="0" max="1" step="any" value="0.5"
+						></div
+						><div
+							><label for="placement-margin">Add margin?</label
+							><input id="placement-margin" type="checkbox" checked
+						></div
+					></div
+					><div class="settings-box"
+						><div
+							><h3>BVH</h3
+						></div
+						><div
+							><label for="core-bvh">Enabled</label
+							><input id="core-bvh" type="checkbox" checked
+						></div
+						><div
+							><label for="core-leafsize">Max Leaf Size</label
+							><input id="core-leafsize" type="number" min="1" max="256" step="1" value="40"
+						></div
+					></div
+					><div style="display:inline-block;padding:0;width:100%;box-sizing:border-box;"
+						><div style="line-height:0;height:0.8cm;display:flex"
+							><h3 style="text-align:center;width:100%;">Core</h3
+						></div
+						><div class="slider-box" style="padding-top:0"
+							><label for="core-working-scale-slider">Working Scale (2&#8319;)</label
+							><input id="core-working-scale-slider" type="range" min="8" max="24" step="1" value="24" class="slider"
+							><input id="core-working-scale-number" type="number" min="8" max="24" step="1" value="24"
+							><label for="core-poly-delta-slider">Poly Delta (WS&Cross;2&#8319;)</label
+							><input id="core-poly-delta-slider" type="range" min="-24" max="0" step="1" value="-9" class="slider"
+							><input id="core-poly-delta-number" type="number" min="-24" max="0" step="1" value="-9"
+							><label for="core-cleanup-delta-slider">Cleanup Delta (WS&Cross;2&#8319;)</label
+							><input id="core-cleanup-delta-slider" type="range" min="-24" max="0" step="1" value="-20" class="slider"
+							><input id="core-cleanup-delta-number" type="number" min="-24" max="0" step="1" value="-20"
+							><label for="core-min-area-slider">Min Area (WS&#178;&Cross;2&#8319;)</label
+							><input id="core-min-area-slider" type="range" min="-24" max="0" step="1" value="-18" class="slider"
+							><input id="core-min-area-number" type="number" min="-24" max="0" step="1" value="-18"
+							><label for="core-adjacency-distance-slider">Max Distance (WS&Cross;2&#8319;)</label
+							><input id="core-adjacency-distance-slider" type="range" min="-24" max="0" step="1" value="-10" class="slider"
+							><input id="core-adjacency-distance-number" type="number" min="-24" max="0" step="1" value="-10"
+							><label for="core-adjacency-angle-slider">Angle Steps (2&#8319;)</label
+							><input id="core-adjacency-angle-slider" type="range" min="1" max="16" step="1" value="8" class="slider"
+							><input id="core-adjacency-angle-number" type="number" min="1" max="16" step="1" value="8"
+							><label for="core-adjacency-graphthickness-slider">Debug Stroke (VP&Cross;2&#8319;)</label
+							><input id="core-adjacency-graphthickness-slider" type="range" min="-24" max="0" step="1" value="-11" class="slider"
+							><input id="core-adjacency-graphthickness-number" type="number" min="-24" max="0" step="1" value="-11"
+						></div
+					></div
+					><div style="flex:1 0 auto;align-content:end"><button id="button-convert">Convert</button></div
+				></div>
+				<div class="frame" id="rsdf-output" style="position:relative">
+					<div id="output-placeholder" class="frame" style="width:100%;aspect-ratio:1;border-color:var(--colour_accent_secondary);margin-left:0;margin-right:0;display:flex;justify-content:center;align-items:center;">
+						<span>No SVG</span>
+					</div>
+					<div style="display:flex;width:100%;flex-direction:column;gap:var(--spacing-m);padding-bottom:var(--spacing-m)">
+						<canvas id="output-rsdf" style="width:100%;display:none"></canvas>
+						<canvas id="output-colour" style="width:100%;display:none"></canvas>
+						<canvas id="output-falsecolour" style="width:100%;display:none"></canvas>
+						<canvas id="output-saturated" style="width:100%;display:none;"></canvas>
+					</div>
+					<button id="button-save">Save</button>
+				</div>
 			</div>
-			<div class="frame" id="rsdf-settings">
-				<!-- TODO: Add settings for SVG placement on texture -->
-				<!-- TODO: Add settings for margins -->
-				<!-- TODO: Add settings for precision, resolution -->
-				<button id="button-convert">Convert</button>
-				<button id="button-save">Save</button>
-			</div>
-
-			<section id="credits">
-				<h2>Credits</h2>
-				<ul>
-					<li><a href="https://artdraw.muisca.co/post/13328/boolean-operations-in-svg-using-javascript.html">Boolean Operations in SVG Using Javascript</a></li>
-					<li><a href="https://github.com/fracalo/svg-contour">SVG Contour (outline to path)</a></li>
-				</ul>
-			</section>
 		</main>
 		<script>include('/sections/footer.html');</script>
 	</body>
