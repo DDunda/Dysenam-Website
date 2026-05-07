@@ -46,6 +46,22 @@ class Point
 		);
 	}
 
+	Multiply(other)
+	{
+		return new Point(
+			this.X * other.X,
+			this.Y * other.Y
+		);
+	}
+
+	Divide(other)
+	{
+		return new Point(
+			this.X / other.X,
+			this.Y / other.Y
+		);
+	}
+
 	LengthSqr()
 	{
 		return this.X * this.X + this.Y * this.Y;
@@ -66,6 +82,14 @@ class Point
 		return new Point(
 			Math.abs(this.X),
 			Math.abs(this.Y)
+		);
+	}
+	
+	Round()
+	{
+		return new Point(
+			Math.round(this.X),
+			Math.round(this.Y)
 		);
 	}
 
@@ -230,7 +254,21 @@ class Bounds
 			(max.Y-min.Y) * 0.5
 		);
 	}
+	
+	Copy()
+	{
+		return new Bounds(
+			this.min.Copy(),
+			this.max.Copy()
+		);
+	}
 
+	static Equal(a, b)
+	{
+		return Point.Equal(a.min,b.min) &&
+			Point.Equal(a.max,b.max);
+	}
+	
 	// Gets the bounds of an array of edge objects.
 	static FromEdges(edges)
 	{
@@ -270,18 +308,6 @@ class Bounds
 		);
 	}
 
-	// Gets the area of these bounds.
-	Area()
-	{
-		return (this.max.X - this.min.X) * (this.max.Y - this.min.Y);
-	}
-
-	// Gets the perimeter of these bounds.
-	Perimeter()
-	{
-		return (this.max.X - this.min.X + this.max.Y - this.min.Y) * 2;
-	}
-
 	// Gets the Dist from a point to these bounds.
 	SignedDistance(point)
 	{
@@ -314,6 +340,36 @@ class Bounds
 			 - this.half_size.Y
 		);
 		return Math.max(d.X,d.Y);
+	}
+	
+	get width()
+	{
+		return this.max.X - this.min.X;
+	}
+	
+	get height()
+	{
+		return this.max.Y - this.min.Y;
+	}
+
+	get size()
+	{
+		return new Point(
+			this.width,
+			this.height
+		);
+	}
+
+	// Gets the area of these bounds.
+	get area()
+	{
+		return this.width * this.height;
+	}
+
+	// Gets the perimeter of these bounds.
+	get perimeter()
+	{
+		return (this.width + this.height) * 2;
 	}
 }
 
@@ -390,8 +446,8 @@ class BVH
 			const union1 = Bounds.Union(bounds[1], to_add1.bounds);
 
 			if ( // A cost function similar to the 3D surface area heuristic
-				(sum_lengths[0] + to_add0.vert1.edge_len) * union0.Area() <=
-				(sum_lengths[1] + to_add1.vert1.edge_len) * union1.Area()
+				(sum_lengths[0] + to_add0.vert1.edge_len) * union0.area <=
+				(sum_lengths[1] + to_add1.vert1.edge_len) * union1.area
 			)
 			{
 				bounds[0] = union0;
@@ -425,10 +481,10 @@ class BVH
 	}
 
 	// Takes edge objects, and recursively splits the set of edges in half based on bounding boxes
-	static FromEdges(edges, bounds)
+	static FromEdges(edges, bounds, leaf_size)
 	{	
 		// TODO?: Use a cost function to check if a split is better than a leaf, rather than only stopping by a size bound
-		if (edges.length < BVH_LEAF_MAX_COUNT)
+		if (edges.length < leaf_size)
 			return new BVHLeaf(bounds, edges);
 			
 		const split_x = BVH.SplitEdges(
@@ -446,18 +502,18 @@ class BVH
 		const area_ratio_x = (Bounds.Intersection(
 			split_x[0].bounds,
 			split_x[1].bounds
-		)?.Area() ?? 0)
+		)?.area ?? 0)
 		/ Math.min(
-			split_x[0].bounds?.Area() ?? 0,
-			split_x[1].bounds?.Area() ?? 0
+			split_x[0].bounds?.area ?? 0,
+			split_x[1].bounds?.area ?? 0
 		);
 		const area_ratio_y = (Bounds.Intersection(
 			split_y[0].bounds,
 			split_y[1].bounds
-		)?.Area() ?? 0)
+		)?.area ?? 0)
 		/ Math.min(
-			split_y[0].bounds?.Area() ?? 0,
-			split_y[1].bounds?.Area() ?? 0
+			split_y[0].bounds?.area ?? 0,
+			split_y[1].bounds?.area ?? 0
 		);
 
 		// Attempt to minimise the intersection between the splits
@@ -472,11 +528,13 @@ class BVH
 			[
 				BVH.FromEdges(
 					out[0].edges,
-					out[0].bounds
+					out[0].bounds,
+					leaf_size
 				),
 				BVH.FromEdges(
 					out[1].edges,
-					out[1].bounds
+					out[1].bounds,
+					leaf_size
 				)
 			]
 		);
@@ -511,19 +569,19 @@ class BVH
 	}
 
 	// Turns a BVH tree into a string for printing
-	ToString(start = "")
+	ToString(outer_bounds, start = "")
 	{
 		// The bounds, always printed at the root of a node
-		const root = `┬ ${(this.bounds.min.X / WORKING_SCALE * SDF_SIZE).toFixed(1)
-				}-${(this.bounds.max.X / WORKING_SCALE * SDF_SIZE).toFixed(1)
-				}, ${(this.bounds.min.Y / WORKING_SCALE * SDF_SIZE).toFixed(1)
-				}-${(this.bounds.max.Y / WORKING_SCALE * SDF_SIZE).toFixed(1)})\n`
+		const root = `┬ ( ${((this.bounds.min.X - outer_bounds.min.X) / outer_bounds.width).toFixed(1)
+				}-${((this.bounds.max.X - outer_bounds.min.X) / outer_bounds.width).toFixed(1)
+				}, (${((this.bounds.min.Y - outer_bounds.min.Y) / outer_bounds.height).toFixed(1)
+				}-${((this.bounds.max.Y - outer_bounds.min.Y) / outer_bounds.height).toFixed(1)})\n`
 
 		// Branches return a tree with subtrees of each branch...
 		if (this.constructor === BVHBranch)
 			return `${root}${
-				start}├${this.branches[0].ToString(start + "│")}\n${
-				start}└${this.branches[1].ToString(start + " ")}`
+				start}├${this.branches[0].ToString(outer_bounds, start + "│")}\n${
+				start}└${this.branches[1].ToString(outer_bounds, start + " ")}`
 		
 		// And leaves return the number of contained edges.
 		return `${root}${start}└ ${this.edges.length} edges`;
@@ -633,24 +691,29 @@ class BVH
 	}
 
 	// Samples an SDF field for a BVH assumed to be of the same colour
-	ToSDF(width, height, viewbox)
+	ToSDF(mapping)
 	{
 		console.time("BVH.ToSDF");
-		const sdf = new Array(height);
-		for (let row = 0; row < height; row++)
-		{
-			sdf[row] = new Array(width);
-		}
 		
+		const sdf = new Array(mapping.size.Y);		
 		const sample = new Point();
-		for (let row = 0; row < height; row++)
-		{
-			sample.Y = ((row + 0.5) / height * viewbox.h + viewbox.y) * WORKING_SCALE / svg_size;
-
-			const rowDat = sdf[row];
-			for (let col = 0; col < width; col++)
+		for (let row = 0; row < mapping.size.Y; row++)
+		{	
+			const rowDat = sdf[row] = new Array(mapping.size.X);
+			
+			sample.Y = Lerp(
+				row / (mapping.size.Y - 1),
+				mapping.bounds.min.Y,
+				mapping.bounds.max.Y
+			);
+			
+			for (let col = 0; col < mapping.size.X; col++)
 			{
-				sample.X = ((col + 0.5) / width * viewbox.w + viewbox.x) * WORKING_SCALE / svg_size;
+				sample.X = Lerp(
+					col / (mapping.size.X - 1),
+					mapping.bounds.min.X,
+					mapping.bounds.max.X
+				);
 
 				rowDat[col] = this.SignedDistance(sample);
 			}
@@ -1472,25 +1535,25 @@ class PaintGradientLinear extends Gradient
 		const x1 = _x1 !== undefined
 			? _x1.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
 				? Lerp(_x1.valueInSpecifiedUnits, bounds.min.X, bounds.max.X)
-				: _x1.value * WORKING_SCALE
+				: _x1.value
 			: bounds.min.X;
 
 		const x2 = _x2 !== undefined
 			? _x2.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
 				? Lerp(_x2.valueInSpecifiedUnits, bounds.min.X, bounds.max.X)
-				: _x2.value * WORKING_SCALE
+				: _x2.value
 			: bounds.max.X;
 
 		const y1 = _y1 !== undefined
 			? _y1.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
 				? Lerp(_y1.valueInSpecifiedUnits, bounds.min.Y, bounds.max.Y)
-				: _y1.value * WORKING_SCALE
+				: _y1.value
 			: bounds.min.Y;
 
 		const y2 = _y2 !== undefined
 			? _y2.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
 				? Lerp(_y2.valueInSpecifiedUnits, bounds.min.Y, bounds.max.Y)
-				: _y2.value * WORKING_SCALE
+				: _y2.value
 			: bounds.min.Y;
 
 		const _spread = element.getAttribute("spreadMethod");
@@ -1673,8 +1736,8 @@ class PaintGradientRadial extends Gradient
 	static FromRadialElement(element, bounds, opacity, blend_mode, linear)
 	{
 		const max_radius = Math.min(
-			bounds.max.X - bounds.min.X,
-			bounds.max.Y - bounds.min.Y
+			bounds.width,
+			bounds.height
 		) * 0.5;
 		const _cx = element.cx?.baseVal;
 		const _cy = element.cy?.baseVal;
@@ -1686,37 +1749,37 @@ class PaintGradientRadial extends Gradient
 		const cx = _cx !== undefined
 			? _cx.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
 				? Lerp(_cx.valueInSpecifiedUnits, bounds.min.X, bounds.max.X)
-				: _cx.value * WORKING_SCALE
+				: _cx.value
 			: (bounds.min.X + bounds.max.X) * 0.5;
 
 		const cy = _cy !== undefined
 			? _cy.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
 				? Lerp(_cy.valueInSpecifiedUnits, bounds.min.Y, bounds.max.Y)
-				: _cy.value * WORKING_SCALE
+				: _cy.value
 			: (bounds.min.Y + bounds.max.Y) * 0.5;
 
 		const r = _r !== undefined
 			? _r.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
 				? _r.valueInSpecifiedUnits * max_radius
-				: _r.value * WORKING_SCALE
+				: _r.value
 			: max_radius;
 
 		const fx = _fx !== undefined
 			? _fx.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
 				? Lerp(_fx.valueInSpecifiedUnits, bounds.min.X, bounds.max.X)
-				: _fx.value * WORKING_SCALE
+				: _fx.value
 			: cx;
 
 		const fy = _fy !== undefined
 			? _fy.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
 				? Lerp(_fy.valueInSpecifiedUnits, bounds.min.Y, bounds.max.Y)
-				: _fy.value * WORKING_SCALE
+				: _fy.value
 			: cy;
 
 		const fr = _fr !== undefined
 			? _fr.unitType == SVGLength.SVG_LENGTHTYPE_PERCENTAGE
 				? _fr.valueInSpecifiedUnits * max_radius
-				: _fr.value * WORKING_SCALE
+				: _fr.value
 			: 0;
 
 		const _spread = element.getAttribute("spreadMethod");

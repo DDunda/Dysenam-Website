@@ -5,14 +5,13 @@ const DEBUG_LINE_THICKNESS = Math.pow(2,-11);
 const ADJACENCY_MAX_DISTANCE = POLY_STEP * Math.pow(2,-1);
 const ADJACENCY_ANGLE_STEPS = Math.pow(2,8);
 const MIN_AREA = Math.pow(2,-18);
-let svg_size = 5;
 const SDF_SIZE = Math.pow(2,8); // Size of rendered sdf
 const SDF_PERPENDICULAR = false; // Whether distance should be perpendicular rather than euclidean
 const SDF_INVERT = false; // Whether to map distances from [0,1] to [1,0]
 const SDF_SATURATE = true; // Whether to set distances to exclusively the minima. Good for debugging, finding doubles, making colour maps by hand...
 const SDF_FALSECOLOUR = false; // Whether the SDF should render with false colour (fully opaque within 3 channels)
 const SDF_COLOUR = true; // Whether the SDF should render the image colour
-const SDF_INNER_RANGE = 1; // Pixels relative to size of image
+const SDF_INNER_RANGE = -1; // Pixels relative to size of image
 const SDF_OUTER_RANGE = 1; // Pixels relative to size of image
 
 const BLEED = {
@@ -29,6 +28,30 @@ const COLOUR_BACKGROUND_COLOUR = new RGB(0,0,0,0);
 const COLOUR_INVALID_FILL_COLOUR = new RGB(1,0,1,1);
 const COLOUR_BLEED_COLOUR = new RGB(1,0,1,1);
 const COLOUR_BLEED_MODE = BLEED.CLOSEST; // If two channels share a minima, which colour do you pick?
+	
+const CONTENT_BOX = {
+	VIEWBOX: 1, // The size is based on the viewbox
+	BOUNDS: 2   // The size is based on the poly bounds
+};
+
+const SCALING = {
+	FIT: 1,    // The content box fits inside the image and expands outwards
+	COVER: 2,  // The content box covers the image and shrinks inwards
+	STRETCH: 3 // The content box is left unchanged, sretching the content
+};
+
+const ASPECT = {
+	Y_X: 0, // y/x
+	X_Y: 1  // x/y
+};
+
+const PLACEMENT_CONTENTBOX = CONTENT_BOX.BOUNDS; // What boundary is fit into the image?
+const PLACEMENT_ASPECT_FIXED = false; // Should the image should a fixed aspect?
+const PLACEMENT_ASPECT_MODE = ASPECT.Y_X; // Is the aspect a x/y or y/x ratio?
+const PLACEMENT_ASPECT = 1; // The aspect ratio of the image (if fixed)
+const PLACEMENT_SCALING = SCALING.FIT; // How the content box is fit to the image
+const PLACEMENT_ALIGNMENT = new Point(0.5); // Where the content box is positioned when fitting
+const PLACEMENT_MARGIN = true; // Whether to add a margin for the outer range
 
 const BVH_ENABLED = true; // Enable BVH acceleration
 const BVH_LEAF_MAX_COUNT = 40; // 40 seems good for mostly straight SVGs, and 72 for mostly curved.
@@ -189,16 +212,26 @@ function AddPaths(element, path_string, fill_colour, stroke_colour, stroke_width
 // compatible format.
 function PointsToCPoly(points)
 {
-	let copied_points = JSON.parse(JSON.stringify(points));
-	ClipperLib.JS.ScaleUpPaths(copied_points, WORKING_SCALE / svg_size);
-	return copied_points;
+	const SCALE = WORKING_SCALE / (svg_size * 0.5);
+	return points
+	.map(path => path
+		.map(point => ({
+			X: (point.X - viewbox.center.X) * SCALE,
+			Y: (point.Y - viewbox.center.Y) * SCALE
+		}))
+	);
 }
 
 function CPolyToPoints(cpoly)
 {
-	let copied_poly = JSON.parse(JSON.stringify(cpoly));
-	ClipperLib.JS.ScaleDownPaths(copied_poly, WORKING_SCALE / svg_size);
-	return copied_poly;
+	const SCALE = (svg_size * 0.5) / WORKING_SCALE;
+	return cpoly
+	.map(path => path
+		.map(point => ({
+			X: point.X * SCALE + viewbox.center.X,
+			Y: point.Y * SCALE + viewbox.center.Y,
+		}))
+	);
 }
 
 // Converts Paths to an SVG path string
@@ -1488,24 +1521,29 @@ function GetSignedDistanceToLayers(
 }
 
 // Samples an SDF field for layers assumed to have the same label
-function LayersToDistances(layers, width, height, viewbox)
+function LayersToDistances(layers, mapping)
 {
 	console.time("LayersToDistances");
-	const sdf = new Array(height);
-	for (let row = 0; row < height; row++)
-	{
-		sdf[row] = new Array(width);
-	}
 
+	const sdf = new Array(mapping.size.Y);
 	const sample = new Point();
-	for (let row = 0; row < height; row++)
+	for (let row = 0; row < mapping.size.Y; row++)
 	{
-		sample.Y = ((row + 0.5) / height * viewbox.h + viewbox.y) * WORKING_SCALE / svg_size;
+		const rowDat = sdf[row] = new Array(mapping.size.X);
 
-		const rowDat = sdf[row];
-		for (let col = 0; col < width; col++)
+		sample.Y = Lerp(
+			row / (mapping.size.Y - 1),
+			mapping.bounds.min.Y,
+			mapping.bounds.max.Y
+		);
+
+		for (let col = 0; col < mapping.size.X; col++)
 		{
-			sample.X = ((col + 0.5) / width * viewbox.w + viewbox.x) * WORKING_SCALE / svg_size;
+			sample.X = Lerp(
+				row / (mapping.size.X - 1),
+				mapping.bounds.min.X,
+				mapping.bounds.max.X
+			);
 
 			rowDat[col] = GetSignedDistanceToLayers(layers, sample);
 		}
@@ -1519,7 +1557,7 @@ function LayersToDistances(layers, width, height, viewbox)
 // Splits layers into differently labelled regions,
 // then renders an SDF for each one (up to four).
 // Returns a Map from Label constants to [[Dist...]...]
-function LabelledLayersToDistances(layers, width, height, viewbox)
+function LabelledLayersToDistances(layers, mapping)
 {
 	if (layers.length == 0)
 		return new Map();
@@ -1548,7 +1586,7 @@ function LabelledLayersToDistances(layers, width, height, viewbox)
 		var dists = new Map(
 			[...labelled_layers.entries()]
 			.map(([label,subLayers],index,arr) => {
-				const sdf = LayersToDistances(subLayers, width, height, viewbox);
+				const sdf = LayersToDistances(subLayers, mapping);
 				
 				console.timeLog("LabelledLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
 
@@ -1571,10 +1609,11 @@ function LabelledLayersToDistances(layers, width, height, viewbox)
 
 				const bvh = BVH.FromEdges(
 					edges,
-					Bounds.FromEdges(edges)
+					Bounds.FromEdges(edges),
+					BVH_LEAF_MAX_COUNT
 				);
 
-				console.log(bvh.ToString());
+				console.log(bvh.ToString(mapping.bounds));
 
 				return [label, bvh];
 			})
@@ -1585,7 +1624,7 @@ function LabelledLayersToDistances(layers, width, height, viewbox)
 			[...bvhs.entries()]
 			.map(([label,bvh],index,arr) =>
 			{
-				const sdf = bvh.ToSDF(width, height, viewbox);
+				const sdf = bvh.ToSDF(mapping);
 				
 				console.timeLog("LabelledLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
 
@@ -1632,17 +1671,14 @@ function LayersCalculateVectors(layers)
 
 function DistancesToSDFImage(
 		dists,
-		width,
-		height,
-		min,
-		max,
+		mapping,
 		perpendicular
 	)
 {
-	let data = [];
+	let data = new Array(mapping.size.X * mapping.size.Y * 4);
 
-	for (let i = 0; i < width * height * 4; i++)
-		data.push(COLOUR_MAX_VALUE);
+	for (let i = 0; i < data.length; i++)
+		data[i] = COLOUR_MAX_VALUE;
 
 	[...dists.entries()].forEach(([label,rows]) => {
 		if (label == LABEL_UNKNOWN)
@@ -1657,8 +1693,12 @@ function DistancesToSDFImage(
 					? sample.perpendicular
 					: sample.euclidean_signed;
 
-				dist = (dist - min) / (max - min);
-				dist = dist > 0 ? (dist < 1 ? dist : 1) : 0;
+				dist = dist > mapping.inner
+					? dist < mapping.outer
+						? (dist - mapping.inner)
+						/ (mapping.outer - mapping.inner)
+						: 1
+					: 0;
 
 				data[index] = Math.round(dist * COLOUR_MAX_VALUE);
 				index += 4;
@@ -1672,8 +1712,7 @@ function DistancesToSDFImage(
 function DistancesToColourImage(
 	dists,
 	data,
-	width,
-	height
+	mapping
 )
 {
 	function FromGamma(dists,label,row,col)
@@ -1696,23 +1735,31 @@ function DistancesToColourImage(
 		? FromLinear
 		: FromGamma;
 
-	const data_out = [];
+	const data_out = new Array(mapping.size.X * mapping.size.Y * 4);
 	const sample = new Point()
 
-	for (let row = 0, i = 0; row < height; row++)
+	for (let row = 0, i = 0; row < mapping.size.Y; row++)
 	{
-		sample.Y = ((row + 0.5) / height * viewbox.h + viewbox.y) * WORKING_SCALE / svg_size;
+		sample.Y = Lerp(
+			row / (mapping.size.Y - 1),
+			mapping.bounds.min.Y,
+			mapping.bounds.max.Y
+		);
+		
 		let colour_out;
-		for (let col = 0; col < width;
+		for (let col = 0; col < mapping.size.X;
 			col++,
-			i += 4,
-			data_out.push(Math.round(colour_out.r * COLOUR_MAX_VALUE)),
-			data_out.push(Math.round(colour_out.g * COLOUR_MAX_VALUE)),
-			data_out.push(Math.round(colour_out.b * COLOUR_MAX_VALUE)),
-			data_out.push(Math.round(colour_out.a * COLOUR_MAX_VALUE))
+			data_out[i++] = Math.round(colour_out.r * COLOUR_MAX_VALUE),
+			data_out[i++] = Math.round(colour_out.g * COLOUR_MAX_VALUE),
+			data_out[i++] = Math.round(colour_out.b * COLOUR_MAX_VALUE),
+			data_out[i++] = Math.round(colour_out.a * COLOUR_MAX_VALUE)
 		)
 		{
-			sample.X = ((col + 0.5) / width * viewbox.w + viewbox.x) * WORKING_SCALE / svg_size;
+			sample.X = Lerp(
+				col / (mapping.size.X - 1),
+				mapping.bounds.min.X,
+				mapping.bounds.max.X
+			);
 
 			const r = data[i+0];
 			const g = data[i+1];
@@ -1851,6 +1898,173 @@ function FalseColourSDFImage(data)
 	return data_out;
 }
 
+function GetImageMapping(layers)
+{
+	let alignment = PLACEMENT_ALIGNMENT;
+	
+	if (PLACEMENT_CONTENTBOX == CONTENT_BOX.VIEWBOX)
+	{
+		var box = viewbox.size;
+		var center = box.Multiply(PLACEMENT_ALIGNMENT).Add(viewbox.min);
+	}
+	else
+	{
+		const poly_bounds = layers.reduce(
+			(_bounds,layer) => {
+				layer.poly
+				.forEach(path => path
+					.forEach(point => 
+						_bounds = new Bounds(
+							Point.Min(_bounds.min,point),
+							Point.Max(_bounds.max,point)
+						)
+					)
+				)
+				return _bounds;
+			},
+			new Bounds()
+		);
+
+		var box = poly_bounds.size;
+		var center = box
+			.Multiply(alignment)
+			.Add(poly_bounds.min);
+	}
+	
+	// If the aspect isn't fixed then the image is scaled relative to the box
+	if (!PLACEMENT_ASPECT_FIXED)
+	{
+		let size = PLACEMENT_MARGIN
+			? SDF_SIZE - SDF_OUTER_RANGE * 2
+			: SDF_SIZE;
+		
+		var img_size = new Point(size);
+		
+		if (box.X == box.Y)
+			var outer = box.X * SDF_OUTER_RANGE / size;
+		else if (box.X < box.Y) // Shrink image width
+		{
+			var outer = box.Y * SDF_OUTER_RANGE / size;
+			img_size.X *= box.X / box.Y;
+		}
+		else // Shrink image height
+		{
+			var outer = box.X * SDF_OUTER_RANGE / size;
+			img_size.Y *= box.Y / box.X;
+		}
+		
+		if (PLACEMENT_MARGIN)
+		{
+			alignment = alignment
+				.Multiply(img_size)
+				.Add(new Point(SDF_OUTER_RANGE))
+			img_size = img_size
+				.Add(new Point(SDF_OUTER_RANGE * 2));
+			alignment = alignment
+				.Divide(img_size);
+			box = box.Scale(SDF_SIZE / size);
+		}
+		
+		img_size = img_size.Round();
+	}
+	// Otherwise, the box is scaled relative to the image
+	else
+	{
+		if (PLACEMENT_ASPECT_MODE == ASPECT.X_Y)
+			var img_size = new Point(
+				Math.round(SDF_SIZE * PLACEMENT_ASPECT),
+				SDF_SIZE
+			);
+		else
+			var img_size = new Point(
+				SDF_SIZE,
+				Math.round(SDF_SIZE * PLACEMENT_ASPECT)
+			);
+		
+		if (PLACEMENT_SCALING == SCALING.FIT ||
+			PLACEMENT_SCALING == SCALING.COVER
+		)
+		{
+			const _img_size = img_size;
+			if (PLACEMENT_MARGIN)
+				img_size = img_size
+					.Subtract(new Point(2 * SDF_OUTER_RANGE));
+
+			const w_ratio = box.X / img_size.X
+			const h_ratio = box.Y / img_size.Y;
+
+			if (w_ratio == h_ratio)
+				var outer = SDF_OUTER_RANGE * w_ratio;
+			else if ((PLACEMENT_SCALING == SCALING.FIT) == (w_ratio < h_ratio))
+			{
+				var outer = SDF_OUTER_RANGE * h_ratio;
+				box.X *= h_ratio / w_ratio;
+			}
+			else
+			{
+				var outer = SDF_OUTER_RANGE * w_ratio;
+				box.Y *= w_ratio / h_ratio;
+			}
+
+			if (PLACEMENT_MARGIN)
+			{
+				alignment = alignment
+					.Multiply(img_size)
+					.Add(new Point(SDF_OUTER_RANGE))
+					.Divide(_img_size);
+				box = new Point(2 * SDF_OUTER_RANGE)
+					.Divide(img_size)
+					.Multiply(box)
+					.Add(box);
+				img_size = _img_size;
+			}
+		}
+		else if (PLACEMENT_MARGIN)
+		{
+			const w_ratio = box.X / img_size.X;
+			const h_ratio = box.Y / img_size.Y;
+
+			if (w_ratio < h_ratio)
+				var outer = box.X * SDF_OUTER_RANGE / (img_size.X + 2 * SDF_OUTER_RANGE);
+			else
+				var outer = box.Y * SDF_OUTER_RANGE / (img_size.Y + 2 * SDF_OUTER_RANGE);
+
+			alignment = alignment
+				.Multiply(box)
+				.Add(new Point(outer));
+				
+			box = box.Add(new Point(2 * outer));
+			
+			alignment = alignment
+				.Divide(box);
+		}
+		else
+		{
+			// This is arbitrary since outer is specified in px, but the scaling of each axis is different
+			// You could take the min here, or always choose X or Y
+			var outer = SDF_OUTER_RANGE * Math.max(box.X / img_size.X, box.Y / img_size.Y);
+		}
+	}
+
+	const inner = outer * SDF_INNER_RANGE / SDF_OUTER_RANGE;
+
+	return {
+		bounds: new Bounds(
+			alignment
+				.Scale(-1)
+				.Multiply(box)
+				.Add(center),
+			new Point(1)
+				.Subtract(alignment)
+				.Multiply(box)
+				.Add(center),
+		),
+		inner: inner,
+		outer: outer,
+		size: img_size
+	};
+}
+
 const UPLOAD_INPUT = document.getElementById("upload-input");
 const SVG_NAME = document.getElementById("input-preview-name");
 const SVG_PREVIEW = document.getElementById("input-preview-svg");
@@ -1874,10 +2088,10 @@ let svg_input = null;
 let svg_overlay_group = null;
 let layers = [];
 let viewbox = undefined;
+let svg_size = undefined;
 let filename = "";
 
-let sdf_width = 0;
-let sdf_height = 0;
+let mapping = undefined; // Mapping from pixels to SVG units
 let sdf_img = [];
 let falsecolour_img = [];
 let saturated_img = [];
@@ -1935,14 +2149,22 @@ function UploadSVG(e)
 			.slice(0,-1) // Exclude file extension
 			.join(".");
 
-		viewbox = {
-			x: Number(viewbox[0]),
-			y: Number(viewbox[1]),
-			w: Number(viewbox[2]),
-			h: Number(viewbox[3])
-		};
+		const viewbox_pos = new Point(
+			Number(viewbox[0]),
+			Number(viewbox[1])
+		);
+
+		const viewbox_size = new Point(
+			Number(viewbox[2]),
+			Number(viewbox[3])
+		);
+
+		viewbox = new Bounds(
+			viewbox_pos,
+			viewbox_pos.Add(viewbox_size)
+		);
 		
-		svg_size = Math.max(viewbox.w,viewbox.h);
+		svg_size = Math.max(viewbox.width, viewbox.height);
 	};
 
 	reader.onerror = () => {
@@ -1968,11 +2190,13 @@ function UpdateLayers(e)
 		const graphics = SVGExtractGraphics(svg_input);
 		layers = FlattenGraphicsToLayers(
 			graphics,
-			COLOUR_BACKGROUND ? COLOUR_BACKGROUND_COLOUR : undefined
+			COLOUR_BACKGROUND ? COLOUR_BACKGROUND_COLOUR : undefined,
+			true
 		);
 		layers = SeparateLayerPolys(layers);
 		layers = CullSmallLayers(layers);
 		ConnectLayers(layers);
+		layers.forEach(layer => layer.poly = CPolyToPoints(layer.poly));
 		SetupGraph(layers);
 		layers = LayersCalculateVectors(layers);
 	}
@@ -2005,8 +2229,7 @@ function DisplayLayers()
 
 	layers
 	.forEach((layer) => {
-		layer.points = CPolyToPoints(layer.poly);
-		layer.center = GetPathsCenter(layer.points);
+		layer.center = GetPathsCenter(layer.poly);
 	});
 
 	layers
@@ -2015,7 +2238,7 @@ function DisplayLayers()
 		
 		AddPaths(
 			svg_overlay_group,
-			PathsToString(layer.points),
+			PathsToString(layer.poly),
 			fill,
 			ClipperLib.JS.AreaOfPolygons(layer.poly) >= 0 ? "#777" : "#f33",
 			svg_size * DEBUG_LINE_THICKNESS
@@ -2069,39 +2292,24 @@ function DisplayLayers()
 
 function RenderSDF()
 {
-	sdf_width = SDF_SIZE;
-	sdf_height = SDF_SIZE;
-
-	if (viewbox.w > viewbox.h)
-		sdf_height = Math.round(SDF_SIZE * viewbox.h / viewbox.w);
-	else
-		sdf_width = Math.round(SDF_SIZE * viewbox.w / viewbox.h);
-
-	const sdf_min = -SDF_INNER_RANGE * WORKING_SCALE / SDF_SIZE;
-	const sdf_max = SDF_OUTER_RANGE * WORKING_SCALE / SDF_SIZE;
+	mapping = GetImageMapping(layers);
 
 	// Todo: Move processing to a web worker so the page does not lock up, and progress can be displayed
-	const dists = LabelledLayersToDistances(layers, sdf_width, sdf_height, viewbox);
+	const dists = LabelledLayersToDistances(layers, mapping);
 
 	sdf_img = DistancesToSDFImage(
 		dists,
-		sdf_width,
-		sdf_height,
-		sdf_min,
-		sdf_max,
-		SDF_PERPENDICULAR,
-		SDF_SATURATE,
-		SDF_INVERT,
-		SDF_FALSECOLOUR
+		mapping,
+		SDF_PERPENDICULAR
 	);
 
 	if (SDF_FALSECOLOUR)
 	{
 		FALSECOLOUR_CANVAS.style.display = "";
-		FALSECOLOUR_CANVAS.width = sdf_width;
-		FALSECOLOUR_CANVAS.height = sdf_height;
+		FALSECOLOUR_CANVAS.width = mapping.size.X;
+		FALSECOLOUR_CANVAS.height = mapping.size.Y;
 
-		const falsecolour_img_data = FALSECOLOUR_CTX.getImageData(0,0,sdf_width,sdf_height);
+		const falsecolour_img_data = FALSECOLOUR_CTX.getImageData(0,0,mapping.size.X,mapping.size.Y);
 		const falsecolour_data = falsecolour_img_data.data;
 
 		falsecolour_img = [...sdf_img];
@@ -2118,10 +2326,10 @@ function RenderSDF()
 	if (SDF_SATURATE)
 	{
 		SATURATED_CANVAS.style.display = "";
-		SATURATED_CANVAS.width = sdf_width;
-		SATURATED_CANVAS.height = sdf_height;
+		SATURATED_CANVAS.width = mapping.size.X;
+		SATURATED_CANVAS.height = mapping.size.Y;
 
-		const saturated_img_data = SATURATED_CTX.getImageData(0,0,sdf_width,sdf_height);
+		const saturated_img_data = SATURATED_CTX.getImageData(0,0,mapping.size.X,mapping.size.Y);
 		const saturated_data = saturated_img_data.data;
 
 		saturated_img = SaturateSDFImage([...sdf_img]);
@@ -2139,17 +2347,16 @@ function RenderSDF()
 	if (SDF_COLOUR)
 	{
 		COLOUR_CANVAS.style.display = "";
-		COLOUR_CANVAS.width = sdf_width;
-		COLOUR_CANVAS.height = sdf_height;
+		COLOUR_CANVAS.width = mapping.size.X;
+		COLOUR_CANVAS.height = mapping.size.Y;
 
-		const colour_img_data = COLOUR_CTX.getImageData(0,0,sdf_width,sdf_height);
+		const colour_img_data = COLOUR_CTX.getImageData(0,0,mapping.size.X,mapping.size.Y);
 		const colour_data = colour_img_data.data;
 
 		colour_img = DistancesToColourImage(
 			dists,
 			sdf_img,
-			sdf_width,
-			sdf_height
+			mapping
 		);
 		
 		colour_img.forEach((v,i) => colour_data[i] = v);
@@ -2157,10 +2364,10 @@ function RenderSDF()
 	}
 
 	OUTPUT_CANVAS.style.display = "";
-	OUTPUT_CANVAS.width = sdf_width;
-	OUTPUT_CANVAS.height = sdf_height;
+	OUTPUT_CANVAS.width = mapping.size.X;
+	OUTPUT_CANVAS.height = mapping.size.Y;
 
-	const img_data = CANVAS_CTX.getImageData(0,0,sdf_width,sdf_height);
+	const img_data = CANVAS_CTX.getImageData(0,0,mapping.size.X,mapping.size.Y);
 	const data = img_data.data;
 
 	if (SDF_INVERT)
@@ -2173,12 +2380,12 @@ function RenderSDF()
 }
 
 // https://stackoverflow.com/a/58652379
-function SaveCanvas(data, width, height, name)
+function SaveCanvas(data, name)
 {
 	let p = new png.PNG(
 		{
-			width: width,
-			height: height,
+			width: mapping.size.X,
+			height: mapping.size.Y,
 			bitDepth: COLOUR_DEPTH
 		}
 	);
@@ -2201,17 +2408,17 @@ function SaveSDFs(e)
 	const filename_prefix = `${
 		filename
 	}_${
-		sdf_width == sdf_height 
-		? sdf_width
-		: `${sdf_width}x${sdf_height}`	
+		mapping.size.X == mapping.size.Y 
+		? mapping.size.X
+		: `${mapping.size.X}x${mapping.size.Y}`	
 	}_`;
 
-	const inner = SDF_INNER_RANGE.toFixed(2);
+	const inner = -SDF_INNER_RANGE.toFixed(2);
 	const outer = SDF_OUTER_RANGE.toFixed(2);
 
 	const filename_suffix = `_${
 		inner == outer
-		? (SDF_INNER_RANGE + SDF_OUTER_RANGE).toFixed(2)
+		? (SDF_OUTER_RANGE - SDF_INNER_RANGE).toFixed(2)
 		: `-${inner}_+${outer}`
 	}${
 		SDF_INVERT
@@ -2222,32 +2429,24 @@ function SaveSDFs(e)
 	if (OUTPUT_CANVAS.style.display != "none")
 		SaveCanvas(
 			sdf_img,
-			sdf_width,
-			sdf_height,
 			filename_prefix + "RSDF" + filename_suffix
 		);
 
 	if (FALSECOLOUR_CANVAS.style.display != "none")
 		SaveCanvas(
 			falsecolour_img,
-			sdf_width,
-			sdf_height,
 			filename_prefix + "FalseColour" + filename_suffix
 		);
 
 	if (SATURATED_CANVAS.style.display != "none")
 		SaveCanvas(
 			saturated_img,
-			sdf_width,
-			sdf_height,
 			filename_prefix + "Saturated" + filename_suffix
 		);
 
 	if (COLOUR_CANVAS.style.display != "none")
 		SaveCanvas(
 			colour_img,
-			sdf_width,
-			sdf_height,
 			filename_prefix + "Colour" + filename_suffix
 		);
 }
