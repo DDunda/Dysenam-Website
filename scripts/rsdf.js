@@ -1543,7 +1543,7 @@ function LayersToDistances(layers, mapping)
 		for (let col = 0; col < mapping.size.X; col++)
 		{
 			sample.X = Lerp(
-				row / (mapping.size.X - 1),
+				col / (mapping.size.X - 1),
 				mapping.bounds.min.X,
 				mapping.bounds.max.X
 			);
