@@ -7,10 +7,10 @@ function UploadSVG(e)
 	svg_input?.remove();
 	svg_input = null;
 
-	OUTPUT_CANVAS.style.display = "none";
-	SATURATED_CANVAS.style.display = "none";
-	FALSECOLOUR_CANVAS.style.display = "none;"
-	COLOUR_CANVAS.style.display = "none";
+	OUTPUT_RSDF.style.display = "none";
+	OUTPUT_REGIONS.style.display = "none";
+	OUTPUT_FALSECOLOUR.style.display = "none;"
+	OUTPUT_COLOUR.style.display = "none";
 	import_converter = undefined;
 
 	let file = e.target.files[0];
@@ -18,16 +18,16 @@ function UploadSVG(e)
 
 	if (!file)
 	{
-		SVG_NAME.textContent = NO_FILE_TEXT;
+		INPUT_NAME.textContent = NO_FILE_TEXT;
 		return;
 	}
 
 	const reader = new FileReader();
 
 	reader.onload = () => {
-		SVG_NAME.textContent = `"${file.name}" (${file.size} bytes)`;
-		SVG_PREVIEW.innerHTML = reader.result;
-		svg_input = SVG_PREVIEW.querySelector("svg");
+		INPUT_NAME.textContent = `"${file.name}" (${file.size} bytes)`;
+		INPUT_SVG.innerHTML = reader.result;
+		svg_input = INPUT_SVG.querySelector("svg");
 		// Remove svg size so it fits to the page
 		// The viewbox will still take care of units & aspect
 		svg_input.removeAttribute("width");
@@ -66,8 +66,8 @@ function UploadSVG(e)
 
 	reader.onerror = () => {
 		showMessage("Error reading the file. Please try again.", "error");
-		SVG_NAME.textContent = NO_FILE_TEXT;
-		SVG_PREVIEW.innerHTML = "";
+		INPUT_NAME.textContent = NO_FILE_TEXT;
+		INPUT_SVG.innerHTML = "";
 	};
 
 	reader.readAsText(file);
@@ -115,6 +115,40 @@ function UpdateLayers(e)
 	DisplayLayers();
 
 	setTimeout(RenderSDF,0);
+}
+
+function RenderSDF()
+{
+	mapping = CONVERTER.GetImageMapping(layers);
+
+	// TODO: Move processing to a web worker so the page does not lock up, and progress can be displayed
+	dists = CONVERTER.LabelledLayersToDistances(layers, mapping);
+
+	sdf_img = CONVERTER.DistancesToSDFImage(
+		dists,
+		mapping
+	);
+
+	img_converter = CONVERTER.Copy();
+
+	if (CONVERTER.render_falsecolour)
+		setTimeout(RenderFalseColour,0);
+	else
+		OUTPUT_FALSECOLOUR.style.display = "none;"
+
+	if (CONVERTER.render_regions)
+		setTimeout(RenderRegions,0);
+	else
+		OUTPUT_REGIONS.style.display = "none";
+
+	if (CONVERTER.render_colour)
+		setTimeout(RenderColour,0);
+	else
+		OUTPUT_COLOUR.style.display = "none";
+
+	setTimeout(RenderRSDF,0);
+
+	// TODO: Create combined preview using RSDF sampling in a shader
 }
 
 function DisplayLayers()
@@ -188,94 +222,86 @@ function DisplayLayers()
 	svg_input.appendChild(svg_overlay_group);
 }
 
-function RenderSDF()
+function RenderFalseColour()
 {
-	mapping = CONVERTER.GetImageMapping(layers);
-
-	// Todo: Move processing to a web worker so the page does not lock up, and progress can be displayed
-	const dists = CONVERTER.LabelledLayersToDistances(layers, mapping);
-
-	sdf_img = CONVERTER.DistancesToSDFImage(
-		dists,
-		mapping
-	);
-
-	img_converter = CONVERTER.Copy();
-
-	if (CONVERTER.render_falsecolour)
-	{
-		FALSECOLOUR_CANVAS.style.display = "";
-		FALSECOLOUR_CANVAS.width = mapping.size.X;
-		FALSECOLOUR_CANVAS.height = mapping.size.Y;
-
-		const falsecolour_img_data = FALSECOLOUR_CTX.getImageData(0,0,mapping.size.X,mapping.size.Y);
-		const falsecolour_data = falsecolour_img_data.data;
-
-		falsecolour_img = [...sdf_img];
-
-		if (CONVERTER.inverted)
-			falsecolour_img = CONVERTER.InvertSDFImage(falsecolour_img);
-
-		falsecolour_img = CONVERTER.FalseColourSDFImage(falsecolour_img);
-
-		falsecolour_img.forEach((v,i) => falsecolour_data[i] = v);
-		FALSECOLOUR_CTX.putImageData(falsecolour_img_data,0,0);
-	}
-
-	if (CONVERTER.render_regions)
-	{
-		SATURATED_CANVAS.style.display = "";
-		SATURATED_CANVAS.width = mapping.size.X;
-		SATURATED_CANVAS.height = mapping.size.Y;
-
-		const saturated_img_data = SATURATED_CTX.getImageData(0,0,mapping.size.X,mapping.size.Y);
-		const saturated_data = saturated_img_data.data;
-
-		saturated_img = CONVERTER.SaturateSDFImage([...sdf_img]);
-
-		if (CONVERTER.inverted)
-			saturated_img = CONVERTER.InvertSDFImage(saturated_img);
-
-		if (CONVERTER.render_falsecolour)
-			saturated_img = CONVERTER.FalseColourSDFImage(saturated_img);
-
-		saturated_img.forEach((v,i) => saturated_data[i] = v);
-		SATURATED_CTX.putImageData(saturated_img_data,0,0);
-	}
-
-	if (CONVERTER.render_colour)
-	{
-		COLOUR_CANVAS.style.display = "";
-		COLOUR_CANVAS.width = mapping.size.X;
-		COLOUR_CANVAS.height = mapping.size.Y;
-
-		const colour_img_data = COLOUR_CTX.getImageData(0,0,mapping.size.X,mapping.size.Y);
-		const colour_data = colour_img_data.data;
-
-		colour_img = CONVERTER.DistancesToColourImage(
-			dists,
-			sdf_img,
-			mapping
-		);
-		
-		colour_img.forEach((v,i) => colour_data[i] = v);
-		COLOUR_CTX.putImageData(colour_img_data,0,0);
-	}
-
-	OUTPUT_CANVAS.style.display = "";
-	OUTPUT_CANVAS.width = mapping.size.X;
-	OUTPUT_CANVAS.height = mapping.size.Y;
-
-	const img_data = CANVAS_CTX.getImageData(0,0,mapping.size.X,mapping.size.Y);
+	const ctx = OUTPUT_FALSECOLOUR.getContext("2d");
+	const img_data = ctx.getImageData(0,0,mapping.size.X,mapping.size.Y);
 	const data = img_data.data;
 
+	OUTPUT_FALSECOLOUR.style.display = "";
+	OUTPUT_FALSECOLOUR.width = mapping.size.X;
+	OUTPUT_FALSECOLOUR.height = mapping.size.Y;
+
+	falsecolour_img = [...sdf_img];
+
 	if (CONVERTER.inverted)
-		sdf_img = CONVERTER.InvertSDFImage(sdf_img);
+		falsecolour_img = CONVERTER.InvertSDFImage(falsecolour_img);
 
-	sdf_img.forEach((v,i) => data[i] = v);
-	CANVAS_CTX.putImageData(img_data,0,0);
+	falsecolour_img = CONVERTER.FalseColourSDFImage(falsecolour_img);
 
-	// TODO: Create combined preview using RSDF sampling in a shader
+	falsecolour_img.forEach((v,i) => data[i] = v);
+	ctx.putImageData(img_data,0,0);
+}
+
+function RenderRegions()
+{
+	const regions_ctx = OUTPUT_REGIONS.getContext("2d");
+	const regions_img_data = regions_ctx.getImageData(0,0,mapping.size.X,mapping.size.Y);
+	const regions_data = regions_img_data.data;
+
+	OUTPUT_REGIONS.style.display = "";
+	OUTPUT_REGIONS.width = mapping.size.X;
+	OUTPUT_REGIONS.height = mapping.size.Y;
+
+	regions_img = CONVERTER.SaturateSDFImage([...sdf_img]);
+
+	if (CONVERTER.inverted)
+		regions_img = CONVERTER.InvertSDFImage(regions_img);
+
+	if (CONVERTER.render_falsecolour)
+		regions_img = CONVERTER.FalseColourSDFImage(regions_img);
+
+	regions_img.forEach((v,i) => regions_data[i] = v);
+	regions_ctx.putImageData(regions_img_data,0,0);
+}
+
+function RenderColour()
+{
+	const ctx = OUTPUT_COLOUR.getContext("2d");
+	const img_data = ctx.getImageData(0,0,mapping.size.X,mapping.size.Y);
+	const data = img_data.data;
+
+	OUTPUT_COLOUR.style.display = "";
+	OUTPUT_COLOUR.width = mapping.size.X;
+	OUTPUT_COLOUR.height = mapping.size.Y;
+
+	colour_img = CONVERTER.DistancesToColourImage(
+		dists,
+		sdf_img,
+		mapping
+	);
+	
+	colour_img.forEach((v,i) => data[i] = v);
+	ctx.putImageData(img_data,0,0);
+}
+
+function RenderRSDF()
+{
+	const ctx = OUTPUT_RSDF.getContext("2d");
+	const img_data = ctx.getImageData(0,0,mapping.size.X,mapping.size.Y);
+	const data = img_data.data;
+
+	OUTPUT_RSDF.style.display = "";
+	OUTPUT_RSDF.width = mapping.size.X;
+	OUTPUT_RSDF.height = mapping.size.Y;
+	
+	rsdf_img = [...sdf_img];
+
+	if (CONVERTER.inverted)
+		rsdf_img = CONVERTER.InvertSDFImage(rsdf_img);
+
+	rsdf_img.forEach((v,i) => data[i] = v);
+	ctx.putImageData(img_data,0,0);
 }
 
 // https://stackoverflow.com/a/58652379
@@ -325,25 +351,25 @@ function SaveSDFs(e)
 		: ""
 	}`;
 
-	if (OUTPUT_CANVAS.style.display != "none")
+	if (OUTPUT_RSDF.style.display != "none")
 		SaveCanvas(
-			sdf_img,
+			rsdf_img,
 			filename_prefix + "RSDF" + filename_suffix
 		);
 
-	if (FALSECOLOUR_CANVAS.style.display != "none")
+	if (OUTPUT_FALSECOLOUR.style.display != "none")
 		SaveCanvas(
 			falsecolour_img,
 			filename_prefix + "FalseColour" + filename_suffix
 		);
 
-	if (SATURATED_CANVAS.style.display != "none")
+	if (OUTPUT_REGIONS.style.display != "none")
 		SaveCanvas(
 			saturated_img,
 			filename_prefix + "Saturated" + filename_suffix
 		);
 
-	if (COLOUR_CANVAS.style.display != "none")
+	if (OUTPUT_COLOUR.style.display != "none")
 		SaveCanvas(
 			colour_img,
 			filename_prefix + "Colour" + filename_suffix
@@ -352,29 +378,25 @@ function SaveSDFs(e)
 
 function AddCallbacks()
 {
-	UPLOAD_INPUT.addEventListener("change", UploadSVG);
+	INPUT_UPLOAD.addEventListener("change", UploadSVG);
 	BUTTON_CONVERT.addEventListener("click", UpdateLayers);
 	BUTTON_SAVE.addEventListener("click", SaveSDFs);
 }
 
 const CONVERTER = new RSDFConverter();
 
-const UPLOAD_INPUT = document.getElementById("upload-input");
+const INPUT_UPLOAD = document.getElementById("input-upload");
 const BUTTON_CONVERT = document.getElementById("button-convert");
 const BUTTON_SAVE = document.getElementById("button-save");
 
-const SVG_NAME = document.getElementById("input-preview-name");
-const SVG_PREVIEW = document.getElementById("input-preview-svg");
+const INPUT_NAME = document.getElementById("input-name");
+const INPUT_SVG = document.getElementById("input-svg");
 const SETTINGS = document.getElementById("rsdf-settings");
-const OUTPUT_CANVAS = document.getElementById("output-canvas");
-const FALSECOLOUR_CANVAS = document.getElementById("falsecolour-canvas");
-const SATURATED_CANVAS = document.getElementById("saturated-canvas");
-const COLOUR_CANVAS = document.getElementById("colour-canvas");
-
-const CANVAS_CTX = OUTPUT_CANVAS.getContext("2d");
-const FALSECOLOUR_CTX = FALSECOLOUR_CANVAS.getContext("2d");
-const SATURATED_CTX = SATURATED_CANVAS.getContext("2d");
-const COLOUR_CTX = COLOUR_CANVAS.getContext("2d");
+const OUTPUT = document.getElementById("rsdf-output");
+const OUTPUT_RSDF = OUTPUT.querySelector("#output-rsdf");
+const OUTPUT_FALSECOLOUR = OUTPUT.querySelector("#output-falsecolour");
+const OUTPUT_REGIONS = OUTPUT.querySelector("#output-saturated");
+const OUTPUT_COLOUR = OUTPUT.querySelector("#output-colour");
 
 const NO_FILE_TEXT = "No file selected (0 bytes)";
 
@@ -386,11 +408,13 @@ let filename = "";
 let import_converter = undefined; // The converter settings used to import the SVG to polygons
 let img_converter = undefined; // The converter settings used for the current generated image/s
 let mapping = undefined; // Mapping from pixels to SVG units
+let dists = [];
 let sdf_img = [];
 let falsecolour_img = [];
 let saturated_img = [];
 let colour_img = [];
+let rsdf_img = [];
 
 AddCallbacks();
-SVG_NAME.textContent = NO_FILE_TEXT;
+INPUT_NAME.textContent = NO_FILE_TEXT;
 });
