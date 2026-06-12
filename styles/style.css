@@ -50,6 +50,12 @@
 	border-width: 0;
 }
 
+p {
+	line-height: 1.75rem;
+	letter-spacing: 0.03rem;
+	margin-top: var(--spacing-xxs);
+}
+
 a {
 	color: var(--colour_link);
 	font-weight: bold;
@@ -70,20 +76,20 @@ h4, h5, h6 {
 }
 
 h1 {
-	margin-top: var(--spacing-m);
-	margin-bottom: var(--spacing-s);
+	margin-top: var(--spacing-l);
+	margin-bottom: var(--spacing-xs);
 }
 
 h2, h3 {
-	margin-top: var(--spacing-m);
-	margin-bottom: var(--spacing-xs);
+	margin-top: var(--spacing-l);
+	margin-bottom: var(--spacing-xxs);
 	font-weight: 600;
 	letter-spacing: 0.05rem;
 }
 
 h4, h5, h6 {
-	margin-top: var(--spacing-s);
-	margin-bottom: var(--spacing-xs);
+	margin-top: var(--spacing-m);
+	margin-bottom: var(--spacing-xxs);
 	font-weight: 600;
 	letter-spacing: 0.05rem;
 }
@@ -97,6 +103,10 @@ header h1 {
 ul, ol {
 	margin-top: var(--spacing-xs);
 	margin-bottom: var(--spacing-l);
+}
+
+ul ul, ol ol, ul ol, ol ul {
+	margin-bottom: var(--spacing-xs);
 }
 
 .left {text-align: left;}
@@ -150,14 +160,25 @@ nav
 	padding: 0;
 }
 
+nav + nav
+{
+	background-color: color-mix(in oklab, var(--colour_accent_secondary) 66%, var(--colour_background) 34%);
+}
+
 nav > a
 {
 	color: var(--colour_text_accent_primary);
-	padding: var(--spacing-m) var(--spacing-m);
+	padding: var(--spacing-m);
 	margin: 0;
 	text-decoration: none;
 	display: inline-block;
 	box-sizing: border-box;
+}
+
+nav + nav > a
+{
+	padding: var(--spacing-s);
+	font-size: 0.75rem;
 }
 
 nav > a:hover
@@ -169,6 +190,11 @@ nav > a.current-page
 {
 	border-bottom: var(--colour_accent_tertiary) solid var(--spacing-xxs);
 	padding-bottom: calc(var(--spacing-m) - var(--spacing-xxs));
+}
+
+nav + nav > a.current-page
+{
+	padding-bottom: calc(var(--spacing-s) - var(--spacing-xxs));
 }
 
 body {
@@ -247,6 +273,22 @@ footer {
 .linkicons img
 {
 	height: 100%;
+}
+
+figure > img
+{
+	display: block;
+	width: 60%;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+figcaption
+{
+	text-align: center;
+	font-style: italic;
+	margin-top: var(--spacing-xs);
+	color: color-mix(in oklab, var(--colour_text_accent_primary) 60%, var(--colour_background) 40%);
 }
 
 .shrinkwrap
