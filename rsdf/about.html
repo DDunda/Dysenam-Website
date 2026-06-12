@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<title>RSDF Converter - About</title>
+		
+		<link rel="stylesheet" href="/styles/style.css"/>
+		<script src="https://include.neocities.org/include.js"></script>
+		<script src="/scripts/mark-nav.js"></script>
+
+		<script>include('/sections/rsdf_favicon.html')</script>
+	</head>
+	<body>
+		<script>include('/sections/header.html')</script>
+		<script>include('/sections/rsdf_nav.html')</script>
+		<main>
+			<article>
+				<h2 id="foreword">Foreword</h2>
+				<p>This is a short practical description of RSDF. For a thorough explanation please
+				await my paper on the topic or get in touch to discuss.</p>
+
+				<h2 id="summary">What is RSDF?</h2>
+				<p>RSDF is a method for rendering scalable vector-like graphics in real-time
+				environments like videogames. It extends signed distance fields (SDFs) to support
+				more than two colours by using multiple alternating SDF regions.</p>
+				
+				<h2 id="creation">Creating RSDFs</h2>
+				<p>To use the tool upload your SVG input, set the size of your output, change other
+				settings as needed (the defaults should work fine), and click <em>Convert</em>. If
+				the output has an undesirable scale or placement in the output please tweak the
+				<em>Placement</em> settings. I recommend saving the outputs with the <em>Save</em>
+				button as directly saving the canvases ignores transparent texels, and uses a less
+				descriptive filename.</p>
+
+				<p>I will add that the converter is <strong>entirely local</strong>. No files are
+				sent to my website, and your work remains private.</p>
+				
+				<h2 id="usage">Using RSDFs</h2>
+				<p>Using RSDFs will require the RSDF itself and an accompanying colour image.
+				Import these into your program of choice, and pass them as input textures to a
+				material or shader from <a href="https://github.com/DDunda/RSDF">this repository</a>.
+				Sampling functions have also been provided to mix RSDF into your own materials and
+				shaders.</p>
+
+				<p>Note: if you are using Blender you must manually specify the size of your RSDF
+				and colour textures inside the material.</p>
+				
+				<h2 id="how-it-works">How does it work?</h2>
+				<p>RSDF itself draws inspiration from Viktor Chlumský’s
+				<a href="https://github.com/Chlumsky/msdfgen/files/3050967/thesis.pdf">Multi-Channel SDF (MSDF)</a>
+				method, wherein both use multiple SDFs to improve some aspect of the output image.
+				MSDF uses multiple channels to create sharp discontinuities and corners — a notable
+				flaw of native SDF. RSDF uses multiple channels to split the shape into different
+				non-overlapping regions of continuous colour. By taking the minimum channel (or
+				maximum in inverted mode) shaders can identify which region/s a pixel belongs to
+				and perform partial sampling.</p>
+
+				<p>Partial sampling is very similar to regular pixel interpolation except that some
+				texels are discarded and the mix is manually normalised. Discarding texels in other
+				regions allows them to have completely different colours, meaning they can be
+				stored in the same image without blurring. The following diagram shows an example
+				space between four texels and the blends made by ignoring different texels:</p>
+
+				<figure>
+					<img src="/assets/images/RSDF_PartialSampling.webp" alt="A diagram of partial sampling. A different gradient is produced for all permutations of four differently coloured corners.">
+					<figcaption>All partial bilinear sampling permutations. Note the different gradients.</figcaption>
+				</figure>
+
+				<h2 id="svg">Why SVG?</h2>
+				<p>The accompanying tool has been built to take Scalable Vector Graphics (SVGs) as
+				input since RSDFs aim to render vector-like graphics. SVGs reliable, precise,
+				widely-supported, and well-defined, but I understand they are not often used in
+				pipelines due to their difficulty. In the future I hope to extend this tool to take
+				high resolution bitmap input, but this method will be less robust and effectively
+				require a second back-end.</p>
+				
+				<h2 id="limitations">Are there limitations?</h2>
+				<p>RSDF is theoretically capable of representing any arrangement of regions, as
+				regions reduce to planar graphs subject to the four colour theorem. There are
+				practical limitations (alongside <a href="./issues.html">converter issues</a>),
+				however:</p>
+				<ul>
+					<li>Very low resolutions will struggle; Thin strips and narrow corners create
+					undefined colours when lacking nearby region texels, and small features cause
+					opposing edges to interfere within the SDFs.
+						<ul><li>Since these issues only occur for features smaller than a texel,
+						increasing the image size will fix it.</li></ul>
+					</li>
+					<li>Texels belonging to multiple regions reintroduce colour bleed. However,
+					this allows regions to border themselves.
+						<ul><li>The converter has an option to mark bleed texels for manual
+						correction. Simply change one of the offending RSDF texel’s channels
+						by one in an image editor.</li></ul>
+					</li>
+					<li>Despite using multiple fields, RSDF corners are not as sharp as MSDF. While
+					there is minor three- and four-way intersection self-sharpening other corners
+					and edges are equal to plain SDFs.
+						<ul>
+							<li>Consider if MSDF partial sampling is stylistically acceptable instead.</li>
+							<li>While an MSDF for every channel fixes the issue it negates memory
+							gains, complicates the pipeline, and adds tons of redundant data.</li>
+						</ul>
+					</li>
+				</ul>
+			</article>
+		</main>
+		<script>include('/sections/footer.html')</script>
+	</body>
+</html>

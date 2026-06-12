@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<title>RSDF Converter - Issues</title>
+		
+		<link rel="stylesheet" href="/styles/style.css"/>
+		<script src="https://include.neocities.org/include.js"></script>
+		<script src="/scripts/mark-nav.js"></script>
+
+		<script>include('/sections/rsdf_favicon.html');</script>
+	</head>
+	<body>
+		<script>include('/sections/header.html');include('/sections/rsdf_nav.html');</script>
+		<main>
+			<article>
+				<h2>Issues</h2>
+				<p>This converter contains several limitations, mainly due to the broad scope of
+				the SVG spec. For the best chances of an SVG working please convert strokes,
+				objects, and text to paths.<p>
+
+				</p>The following list includes known limitations of this converter:</p>
+
+				<ul>
+					<li>Progress is not displayed on the webpage and it will appear to hang
+						<ul><li>Check the javascript console for progress logging</li></ul>
+						<ul><li>I plan to resolve this with web workers</li></ul>
+					</li>
+					<li>Strokes are ignored</li>
+					<li><a href="https://www.w3.org/TR/SVG2/render.html#ClippingAndMasking">Clip
+					and mask paths</a> are ignored</li>
+					<li><a href="https://www.w3.org/TR/compositing/#blendingnonseparable">Non-separable
+					blend modes</a> are ignored</li>
+					<li><a href="https://www.w3.org/TR/filter-effects/">Filters</a> are ignored</li>
+					<li>Colour mixing/blending is only executed in gamma/linear sRGB</li>
+					<li>Region distances are not maximised</li>
+					<li>Region labelling is not deterministic
+						<ul><li>This will be fixed alongside distance maximisation</li></ul>
+					</li>
+					<li>Several SVG elements are missing:
+						<ul>
+							<li><a href="https://www.w3.org/TR/SVG2/animate.html">All animation
+							elements</a></li>
+							<li><a href="https://www.w3.org/TR/SVG2/interact.html">All interactive
+							elements</a></li>
+							<li><a href="https://www.w3.org/TR/SVG2/text.html">All text elements</a></li>
+							<li><a href="https://www.w3.org/TR/SVG2/linking.html">Most URL
+							references, and all external file linkage</a></li>
+							<li>&lt;clipPath&gt;</li>
+							<li>&lt;feXXXX&gt; elements</li>
+							<li>&lt;image&gt;</li>
+							<li>&lt;line&gt;</li>
+							<li>&lt;marker&gt;</li>
+							<li>&lt;mask&gt;</li>
+							<li>&lt;pattern&gt;</li>
+							<li>&lt;polygon&gt;</li>
+							<li>&lt;polyline&gt;</li>
+							<li>&lt;symbol&gt;</li>
+							<li>&lt;use&gt;</li>
+							<li>&lt;view&gt;</li>
+						</ul>
+					</li>
+				</ul>
+			</article>
+		</main>
+		<script>include('/sections/footer.html');</script>
+	</body>
+</html>
