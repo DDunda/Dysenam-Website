@@ -268,7 +268,8 @@ class RSDFConverter {
 		this.scaling = RSDFConverter.SCALING.FIT; // How the content box is fit to the image
 		this.alignment_x = 0.5; // Where the content box is positioned when fitting
 		this.alignment_y = 0.5;
-		this.margin = true; // Whether to add a margin for the outer range
+		this.outer_margin = true; // Whether to add a outer_margin for the outer range
+		this.sample_borders = false; // Whether to expand by a half pixel to align samples to pixel corners
 		
 		this.bvh_enabled = true; // Enable BVH acceleration
 		this.bvh_leaf_size = 40; // 40 seems good for mostly straight SVGs, and 72 for mostly curved.
@@ -314,7 +315,8 @@ class RSDFConverter {
 		output.scaling = this.scaling;
 		output.alignment_x = this.alignment_x;
 		output.alignment_y = this.alignment_y;
-		output.margin = this.margin;
+		output.outer_margin = this.outer_margin;
+		output.sample_borders = this.sample_borders;
 		output.bvh_enabled = this.bvh_enabled;
 		output.bvh_leaf_size = this.bvh_leaf_size;
 		output.working_scale = this.working_scale;
@@ -2009,14 +2011,14 @@ class RSDFConverter {
 	{
 		let alignment = this.alignment;
 		
+		// Get the content box to align to
 		if (this.content_box == RSDFConverter.CONTENT_BOX.VIEWBOX)
 		{
-			var box = this.viewbox.size;
-			var center = box.Multiply(this.alignment).Add(this.viewbox.min);
+			var content_bounds = this.viewbox;
 		}
 		else
 		{
-			const poly_bounds = layers.reduce(
+			var content_bounds = layers.reduce(
 				(_bounds,layer) => {
 					layer.poly
 					.forEach(path => path
@@ -2031,144 +2033,151 @@ class RSDFConverter {
 				},
 				new Bounds()
 			);
-
-			var box = poly_bounds.size;
-			var center = box
-				.Multiply(alignment)
-				.Add(poly_bounds.min);
 		}
-		
-		// If the aspect isn't fixed then the image is scaled relative to the box
+
+		if (this.print_debug)
+			console.log(`GetImageMapping: Content bounds: (${content_bounds.min.X},${content_bounds.min.Y}) \
+- (${content_bounds.max.X},${content_bounds.max.Y})`);
+
+		// Get final image resolution
 		if (!this.fixed_aspect)
 		{
-			let size = this.margin
-				? this.size - this.outer_px * 2
-				: this.size;
-			
-			var img_size = new Point(size);
-			
-			if (box.X == box.Y)
-				var outer = box.X * this.outer_px / size;
-			else if (box.X < box.Y) // Shrink image width
-			{
-				var outer = box.Y * this.outer_px / size;
-				img_size.X *= box.X / box.Y;
-			}
-			else // Shrink image height
-			{
-				var outer = box.X * this.outer_px / size;
-				img_size.Y *= box.Y / box.X;
-			}
-			
-			if (this.margin)
-			{
-				alignment = alignment
-					.Multiply(img_size)
-					.Add(new Point(this.outer_px))
-				img_size = img_size
-					.Add(new Point(this.outer_px * 2));
-				alignment = alignment
-					.Divide(img_size);
-				box = box.Scale(this.size / size);
-			}
-			
-			img_size = img_size.Round();
+			if (content_bounds.width < content_bounds.height) // Shrink image width
+				var output_resolution = new Point(
+					Math.round(this.size * content_bounds.width / content_bounds.height),
+					this.size
+				);
+			else if (content_bounds.width > content_bounds.height) // Shrink image height
+				var output_resolution = new Point(
+					this.size,
+					Math.round(this.size * content_bounds.height / content_bounds.width)
+				);
+			else
+				var output_resolution = new Point(this.size);
 		}
-		// Otherwise, the box is scaled relative to the image
 		else
 		{
 			if (this.aspect_mode == RSDFConverter.ASPECT.X_Y)
-				var img_size = new Point(
+				var output_resolution = new Point(
 					Math.round(this.size * this.aspect),
 					this.size
 				);
 			else
-				var img_size = new Point(
+				var output_resolution = new Point(
 					this.size,
 					Math.round(this.size * this.aspect)
 				);
-			
-			if (this.scaling == RSDFConverter.SCALING.FIT ||
-				this.scaling == RSDFConverter.SCALING.COVER
-			)
-			{
-				const _img_size = img_size;
-				if (this.margin)
-					img_size = img_size
-						.Subtract(new Point(2 * this.outer_px));
-
-				const w_ratio = box.X / img_size.X
-				const h_ratio = box.Y / img_size.Y;
-
-				if (w_ratio == h_ratio)
-					var outer = this.outer_px * w_ratio;
-				else if ((this.scaling == RSDFConverter.SCALING.FIT) == (w_ratio < h_ratio))
-				{
-					var outer = this.outer_px * h_ratio;
-					box.X *= h_ratio / w_ratio;
-				}
-				else
-				{
-					var outer = this.outer_px * w_ratio;
-					box.Y *= w_ratio / h_ratio;
-				}
-
-				if (this.margin)
-				{
-					alignment = alignment
-						.Multiply(img_size)
-						.Add(new Point(this.outer_px))
-						.Divide(_img_size);
-					box = new Point(2 * this.outer_px)
-						.Divide(img_size)
-						.Multiply(box)
-						.Add(box);
-					img_size = _img_size;
-				}
-			}
-			else if (this.margin)
-			{
-				const w_ratio = box.X / img_size.X;
-				const h_ratio = box.Y / img_size.Y;
-
-				if (w_ratio < h_ratio)
-					var outer = box.X * this.outer_px / (img_size.X + 2 * this.outer_px);
-				else
-					var outer = box.Y * this.outer_px / (img_size.Y + 2 * this.outer_px);
-
-				alignment = alignment
-					.Multiply(box)
-					.Add(new Point(outer));
-					
-				box = box.Add(new Point(2 * outer));
-				
-				alignment = alignment
-					.Divide(box);
-			}
-			else
-			{
-				// This is arbitrary since outer is specified in px, but the scaling of each axis is different
-				// You could take the min here, or always choose X or Y
-				var outer = this.outer_px * Math.max(box.X / img_size.X, box.Y / img_size.Y);
-			}
 		}
 
-		const inner = outer * this.inner_px / this.outer_px;
+		// Get the resolution of the inner image fit to the content
+		let fit_resolution = output_resolution.Copy();
+
+		if (this.sample_borders)
+		{
+			fit_resolution.X -= 1.0;
+			fit_resolution.Y -= 1.0;
+		}
+
+		if (this.outer_margin)
+		{
+			fit_resolution.X -= this.outer_px * 2.0;
+			fit_resolution.Y -= this.outer_px * 2.0;
+		}
+
+		if (fit_resolution.X <= 0.0 || fit_resolution.Y <= 0.0)
+			throw Error(`GetImageMapping: Fit resolution is non-positive \
+(${fit_resolution.X}x${fit_resolution.Y}) due to corner sampling or outer margin!`);
+
+		const w_units = content_bounds.width / fit_resolution.X
+		const h_units = content_bounds.height / fit_resolution.Y;
+		
+		// If the aspect isn't fixed, horizontal density matches vertical density,
+		// or the scaling is set to STRETCH, then the image is scaled relative to the box
+		if ((this.fixed_aspect
+				? w_units == h_units
+				: content_bounds.width == content_bounds.height
+			) ||
+			this.scaling == RSDFConverter.SCALING.STRETCH)
+		{
+			var pixel_units = new Point(w_units, h_units);
+			var fit_size = content_bounds.size.Copy();
+		}
+		// Otherwise, the box is scaled relative to the image
+		else if (this.fixed_aspect
+			// If fixed aspect, use scaling mode to decide between smaller or larger pixel units
+			? (this.scaling == RSDFConverter.SCALING.FIT) == (w_units < h_units)
+			// If free aspect, keep the larger side fixed
+			: content_bounds.width < content_bounds.height)
+		{
+			var pixel_units = new Point(h_units);
+			var fit_size = new Point(
+				fit_resolution.X * h_units,
+				content_bounds.height
+			);
+		}
+		else
+		{
+			var pixel_units = new Point(w_units);
+			var fit_size = new Point(
+				content_bounds.width,
+				fit_resolution.Y * w_units
+			);
+		}
+		
+		let fit_position = content_bounds.size
+			.Subtract(fit_size)
+			.Multiply(this.alignment)
+			.Add(content_bounds.min);
+
+		let fit_bounds = new Bounds(
+			fit_position,
+			fit_position.Add(fit_size)
+		);
+
+		if (this.print_debug)
+		{
+			console.log(`GetImageMapping: Fit resolution: ${fit_resolution.X}x${fit_resolution.Y}`);
+			console.log(`GetImageMapping: Fit bounds: (${fit_bounds.min.X},${fit_bounds.min.Y}) \
+- (${fit_bounds.max.X},${fit_bounds.max.Y})`);
+		}
+
+		if (!this.sample_borders)
+		{
+			fit_bounds.min = fit_bounds.min.Add(pixel_units.Scale(0.5));
+			fit_bounds.max = fit_bounds.max.Subtract(pixel_units.Scale(0.5));
+		}
+
+		if (this.outer_margin)
+		{
+			fit_bounds.min = fit_bounds.min.Subtract(pixel_units.Scale(this.outer_px));
+			fit_bounds.max = fit_bounds.max.Add(pixel_units.Scale(this.outer_px));
+		}
+
+		if (this.print_debug)
+		{
+			console.log(`GetImageMapping: Output resolution: ${output_resolution.X}x${output_resolution.Y}`);
+			console.log(`GetImageMapping: Output bounds: (${fit_bounds.min.X},${fit_bounds.min.Y}) \
+- (${fit_bounds.max.X},${fit_bounds.max.Y})`);
+		}
+
+		if (pixel_units.X == pixel_units.Y)
+			// Arbitrary choice
+			pixel_units = pixel_units.X;
+		else
+			// You could take the min here, or always choose X or Y
+			pixel_units = Math.max(pixel_units.X, pixel_units.Y);
+
+		const inner = this.inner_px * pixel_units;
+		const outer = this.outer_px * pixel_units;
+
+		if (this.print_debug)
+			console.log(`GetImageMapping: SDF range: -${-inner} - +${outer}`);
 
 		return {
-			bounds: new Bounds(
-				alignment
-					.Scale(-1)
-					.Multiply(box)
-					.Add(center),
-				new Point(1)
-					.Subtract(alignment)
-					.Multiply(box)
-					.Add(center),
-			),
+			bounds: fit_bounds,
 			inner: inner,
 			outer: outer,
-			size: img_size
+			size: output_resolution
 		};
 	}
 }
