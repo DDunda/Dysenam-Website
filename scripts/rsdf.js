@@ -261,7 +261,7 @@ class RSDFConverter {
 		this.bit_depth = 8;
 		this.linear_enabled = false;
 		
-		this.content_box = RSDFConverter.CONTENT_BOX.BOUNDS; // What boundary is fit into the image?
+		this.content_box = RSDFConverter.CONTENT_BOX.VIEWBOX; // What boundary is fit into the image?
 		this.fixed_aspect = false; // Should the image should a fixed aspect?
 		this.aspect_mode = RSDFConverter.ASPECT.Y_X; // Is the aspect a x/y or y/x ratio?
 		this.aspect = 1; // The aspect ratio of the image (if fixed)
@@ -747,7 +747,10 @@ class RSDFConverter {
 			if (e.points.flat(1).length == 0)
 				return false;
 
-			if (!(e.matrix?.isIdentity ?? true))
+			if (e.matrix && (
+				e.matrix.a != 1 || e.matrix.b != 0 ||
+				e.matrix.c != 0 || e.matrix.d != 1 ||
+				e.matrix.e != 0 || e.matrix.f != 0))
 			{
 				// Apply transform to get true coordinates
 				e.points = e.points.map(path =>
