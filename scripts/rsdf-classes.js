@@ -691,9 +691,10 @@ class BVH
 	}
 
 	// Samples an SDF field for a BVH assumed to be of the same colour
-	ToSDF(mapping)
+	ToSDF(mapping, print_performance)
 	{
-		console.time("BVH.ToSDF");
+		if (print_performance)
+			console.time("BVH.ToSDF");
 		
 		const sdf = new Array(mapping.size.Y);		
 		const sample = new Point();
@@ -719,7 +720,8 @@ class BVH
 			}
 		}
 
-		console.timeEnd("BVH.ToSDF");
+		if (print_performance)
+			console.timeEnd("BVH.ToSDF");
 
 		return sdf;
 	}
