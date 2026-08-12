@@ -283,6 +283,9 @@ class RSDFConverter {
 		this.graph_thickness = Math.pow(2,-11);
 		
 		this.viewbox = new Bounds();
+
+		this.print_debug = false;
+		this.print_performance = true;
 	}
 
 	Copy()
@@ -322,6 +325,8 @@ class RSDFConverter {
 		output.angle_steps = this.angle_steps;
 		output.graph_thickness = this.graph_thickness;
 		output.viewbox = this.viewbox.Copy();
+		output.print_debug = this.print_debug;
+		output.print_performance = this.print_performance;
 		
 		return output;
 	}
@@ -550,7 +555,7 @@ class RSDFConverter {
 		let r = circle.getAttribute("r");
 
 		if (r === undefined)
-			console.log("SVGCircleToPoints: Expected r (radius) attribute");
+			console.error("SVGCircleToPoints: Expected r (radius) attribute");
 
 		r = Number(r);
 
@@ -572,9 +577,9 @@ class RSDFConverter {
 		let ry = ellipse.getAttribute("ry");
 
 		if (rx === undefined)
-			console.log("SVGEllipseToPoints: Expected rx (x radius) attribute");
+			console.error("SVGEllipseToPoints: Expected rx (x radius) attribute");
 		if (ry === undefined)
-			console.log("SVGEllipseToPoints: Expected ry (y radius) attribute");
+			console.error("SVGEllipseToPoints: Expected ry (y radius) attribute");
 
 		rx = Number(rx);
 		ry = Number(ry);
@@ -810,7 +815,7 @@ class RSDFConverter {
 	// Takes transparent layers and composites them onto layers beneath
 	FlattenGraphicsToLayers(graphics, is_root=true)
 	{
-		if (is_root)
+		if (is_root && this.print_performance)
 			console.time("FlattenGraphicsToLayers");
 
 		const background_paint = is_root && this.background_enabled
@@ -965,7 +970,7 @@ class RSDFConverter {
 
 		if (!background_paint)
 		{
-			if (is_root)
+			if (is_root && this.print_performance)
 				console.timeEnd("FlattenGraphicsToLayers");
 
 			return graphics;
@@ -1014,7 +1019,7 @@ class RSDFConverter {
 			});
 		}
 
-		if (is_root)
+		if (is_root && this.print_performance)
 			console.timeEnd("FlattenGraphicsToLayers");
 
 		return graphics;
@@ -1608,7 +1613,8 @@ class RSDFConverter {
 	// Samples an SDF field for layers assumed to have the same label
 	LayersToDistances(layers, mapping)
 	{
-		console.time("LayersToDistances");
+		if (this.print_performance)
+			console.time("LayersToDistances");
 
 		const sdf = new Array(mapping.size.Y);
 		const sample = new Point();
@@ -1634,7 +1640,8 @@ class RSDFConverter {
 			}
 		}
 
-		console.timeEnd("LayersToDistances");
+		if (this.print_performance)
+			console.timeEnd("LayersToDistances");
 
 		return sdf;
 	}
@@ -1647,7 +1654,8 @@ class RSDFConverter {
 		if (layers.length == 0)
 			return new Map();
 		
-		console.time("LabelledLayersToDistances");
+		if (this.print_performance)
+			console.time("LabelledLayersToDistances");
 
 		// Separate layers into groups of single labels
 		const labelled_layers = layers.reduce(
@@ -1673,7 +1681,11 @@ class RSDFConverter {
 				.map(([label,subLayers],index,arr) => {
 					const sdf = this.LayersToDistances(subLayers, mapping);
 					
-					console.timeLog("LabelledLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
+					if (this.print_performance)
+						console.timeLog(
+							"LabelledLayersToDistances",
+							`Finished SDF ${index + 1}/${arr.length}`
+						);
 
 					return [label, sdf];
 				})
@@ -1681,7 +1693,8 @@ class RSDFConverter {
 		}
 		else
 		{	
-			console.time("LabelledLayersToDistances: BVH");
+			if (this.print_performance)
+				console.time("LabelledLayersToDistances: BVH");
 			
 			// Build a combined BVH for each set of layers
 			const bvhs = new Map(
@@ -1698,34 +1711,43 @@ class RSDFConverter {
 						this.bvh_leaf_size
 					);
 
-					console.log(bvh.ToString(mapping.bounds));
+					if (this.print_debug)
+						console.log(bvh.ToString(mapping.bounds));
 
 					return [label, bvh];
 				})
 			);
-			console.timeEnd("LabelledLayersToDistances: BVH");
+
+			if (this.print_performance)
+				console.timeEnd("LabelledLayersToDistances: BVH");
 
 			var dists = new Map(
 				[...bvhs.entries()]
 				.map(([label,bvh],index,arr) =>
 				{
-					const sdf = bvh.ToSDF(mapping);
+					const sdf = bvh.ToSDF(mapping, this.print_performance);
 					
-					console.timeLog("LabelledLayersToDistances",`Finished SDF ${index + 1}/${arr.length}`);
+					if (this.print_performance)
+						console.timeLog(
+							"LabelledLayersToDistances",
+							`Finished SDF ${index + 1}/${arr.length}`
+						);
 
 					return [label, sdf];
 				})
 			);
 		}
 
-		console.timeEnd("LabelledLayersToDistances");
+		if (this.print_performance)
+			console.timeEnd("LabelledLayersToDistances");
 
 		return dists;
 	}
 
 	LayersCalculateVectors(layers)
 	{
-		console.time("LayersCalculateVectors");
+		if (this.print_performance)
+			console.time("LayersCalculateVectors");
 
 		layers
 		.forEach(layer => layer.poly
@@ -1749,7 +1771,8 @@ class RSDFConverter {
 			})
 		);
 
-		console.timeEnd("LayersCalculateVectors");
+		if (this.print_performance)
+			console.timeEnd("LayersCalculateVectors");
 
 		return layers;
 	}

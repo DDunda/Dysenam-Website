@@ -395,6 +395,8 @@ function AddCallbacks()
 		"placement-fixed-aspect": "fixed_aspect",
 		"placement-margin": "margin",
 		"core-bvh": "bvh_enabled",
+		"core-print-debug": "print_debug",
+		"core-print-performance": "print_performance",
 	};
 
 	const ENUMS = {
