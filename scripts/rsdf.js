@@ -1327,42 +1327,60 @@ class RSDFConverter {
 		// Block labels if using it would cause a clique to have
 		// less labels available than there are nodes.
 		[...unknown_connections]
-		.forEach((c1, i, arr1) => {
+		.forEach((c1, i1, arr1) => {
 			const c1_labels = this.GetValidLayerLabels(c1);
 
 			// Connections of layer AND c1
 			const possible_c2 = new Set(
-				arr1.slice(i + 1)
+				arr1.slice(i1 + 1)
 			).intersection(c1.connections);			
 
 			[...possible_c2]
-			.forEach((c2, j, arr2) => {
+			.forEach((c2, i2, arr2) => {
 				const c2_labels = this.GetValidLayerLabels(c2);
 				const c12_labels = c1_labels.union(c2_labels);
 
 				// Connections of layer AND c1 AND c2
 				const possible_c3 = new Set(
-					arr2.slice(j + 1)
+					arr2.slice(i2 + 1)
 				).intersection(c2.connections);
 
 				[...possible_c3]
-				.forEach((c3, k, arr3) => {
+				.forEach((c3, i3, arr3) => {
 					const c3_labels = this.GetValidLayerLabels(c3);
 					const c123_labels = c12_labels.union(c3_labels);
+					
+					// Connections of layer AND c1 AND c2 AND c3
+					const possible_c4 = new Set(
+						arr3.slice(i3 + 1)
+					).intersection(c3.connections);
+
+					// A >=5-clique has formed! Impossible to colour.
+					if (possible_c4.length > 0)
+						connection_labels = connection_labels.union(RSDFConverter.GRAPH_LABELS);
 
 					// 4-clique neighbours (maximum) with only three labels
-					if (c123_labels.size < 4)
+					if (c123_labels.size == 3)
 						connection_labels = connection_labels.union(c123_labels);
+					// Less labels than clique neighbours! Impossible to colour.
+					else if (c123_labels.size < 3)
+						connection_labels = connection_labels.union(RSDFConverter.GRAPH_LABELS);
 				});
 
 				// 3-clique neighbours with only two labels
-				if (c12_labels.size < 3)
+				if (c12_labels.size == 2)
 					connection_labels = connection_labels.union(c12_labels);
+				// Less labels than clique neighbours! Impossible to colour.
+				else if (c12_labels.size < 2)
+					connection_labels = connection_labels.union(RSDFConverter.GRAPH_LABELS); // Invalid state
 			});
 
 			// 2-clique neighbour with only one label
-			if (c1_labels.size < 2)
+			if (c1_labels.size == 1)
 				connection_labels = connection_labels.union(c1_labels);
+			// Less labels than clique neighbours! Impossible to colour.
+			else if (c1_labels.size < 1)
+				connection_labels = connection_labels.union(RSDFConverter.GRAPH_LABELS); // Invalid state
 		});
 
 		// Return valid labels without those that break cliques
