@@ -252,6 +252,9 @@ class RSDFConverter {
 		this.outer_px = 1; // Pixels relative to size of image
 		this.perpendicular = false; // Whether distance should be perpendicular rather than euclidean
 		this.inverted = false; // Whether to map distances from [0,1] to [1,0]
+		this.separated = true; // Whether the distances between similar regions is maximised
+		this.separation_limit = true; // Whether to ignore separation past a certain distance
+		this.separation_minimum = 1; // The maximum range to attempt separating regions
 		
 		this.background_enabled = true;
 		this.background_colour = new RGB(0,0,0,0);
@@ -301,6 +304,9 @@ class RSDFConverter {
 		output.outer_px = this.outer_px;
 		output.perpendicular = this.perpendicular;
 		output.inverted = this.inverted;
+		output.separated = this.separated;
+		output.separation_limit = this.separation_limit;
+		output.separation_minimum = this.separation_minimum;
 		output.background_enabled = this.background_enabled;
 		output.background_colour = this.background_colour.Copy();
 		output.bleed_mode = this.bleed_mode;
@@ -1295,8 +1301,6 @@ class RSDFConverter {
 				}
 			}
 		});
-		
-		// TODO: Annotate distances between all regions
 	}
 
 	// Finds labels that are not immediately blocked by neighbours
@@ -1568,6 +1572,156 @@ class RSDFConverter {
 			})
 		);
 		
+		return true;
+	}
+
+	AddGraphConnection(layer_a, layer_b)
+	{
+		if (layer_a === layer_b)
+			return;
+
+		if (!layer_a.connections.has(layer_b))
+		{
+			const label_b = layer_b.graph_label;
+			layer_a.neighbour_labels.set(
+				label_b,
+				layer_a.neighbour_labels.get(label_b) + 1
+			);
+			layer_a.connections.add(layer_b);
+		}
+
+		if (!layer_b.connections.has(layer_a))
+		{
+			const label_a = layer_a.graph_label;
+			layer_b.neighbour_labels.set(
+				label_a,
+				layer_b.neighbour_labels.get(label_a) + 1
+			);
+			layer_b.connections.add(layer_a);
+		}
+	}
+
+	RemoveGraphConnection(layer_a, layer_b)
+	{
+		if (layer_a === layer_b)
+			return;
+
+		if (layer_a.connections.has(layer_b))
+		{
+			const label_b = layer_b.graph_label;
+			layer_a.neighbour_labels.set(
+				label_b,
+				layer_a.neighbour_labels.get(label_b) - 1
+			);
+			layer_a.connections.delete(layer_b);
+		}
+
+		if (layer_b.connections.has(layer_a))
+		{
+			const label_a = layer_a.graph_label;
+			layer_b.neighbour_labels.set(
+				label_a,
+				layer_b.neighbour_labels.get(label_a) - 1
+			);
+			layer_b.connections.delete(layer_a);
+		}
+	}
+
+	// Gets distances between every region, even if disconnected
+	GetInterRegionDistances(layers)
+	{
+		BVH.CalculateForLayers(layers, this.bvh_leaf_size);
+
+		return layers.slice(0, layers.length - 1)
+		.map((layer_a, a) =>
+			layers
+			.slice(a + 1)
+			.map((layer_b, b) => {
+				let min_dist = Number.POSITIVE_INFINITY;
+
+				// Compare every point in A to B's BVH
+				min_dist = layer_a.poly.flat(1).reduce(
+					(dist, point) => layer_b.bvh.SignedDistance(new Point(point.X, point.Y), dist),
+					min_dist
+				);
+
+				// Compare every point in B to A's BVH
+				min_dist = layer_b.poly.flat(1).reduce(
+					(dist, point) => layer_a.bvh.SignedDistance(new Point(point.X, point.Y), dist),
+					min_dist
+				);
+
+				return {
+					distance: min_dist.euclidean_signed,
+					layers: [layer_a, layer_b]
+				};
+			})
+		).flat(1);
+	}
+
+	// Attempts to label a graph while maximising distances between each set of labels.
+	LabelGraphSeparated(layers, distances)
+	{
+		if (layers.length == 0)
+			return true;
+
+		if (this.separation_limit)
+			distances = distances
+			.filter(dist => dist.distance < this.separation_minimum);
+
+		distances = distances
+		.filter(dist =>
+			// Ignore if already connected
+			!(
+				dist.layers[0].connections.has(dist.layers[1]) ||
+				dist.layers[1].connections.has(dist.layers[0])
+			)
+		)
+		// Attempt to connect the closest layers first
+		.sort((a, b) => a.distance - b.distance);
+
+		if (distances.length == 0)
+			return this.LabelGraph(layers);
+		
+		if (this.print_performance)
+			console.time("LabelGraphSeparated");
+
+		let added_connections = [];
+		let initial_state = this.GetGraphState(layers);
+		let solution_state = undefined;
+
+		for (const dist of distances)
+		{
+			this.AddGraphConnection(dist.layers[0], dist.layers[1]);
+
+			if (!this.LabelGraph(layers))
+			{
+				this.RemoveGraphConnection(dist.layers[0], dist.layers[1]);
+				continue;
+			}
+
+			added_connections.push([
+				dist.layers[0],
+				dist.layers[1]
+			]);
+
+			solution_state = this.GetGraphState(layers);
+			this.SetGraphState(initial_state);
+		}
+
+		// Remove these connections since they aren't "real"
+		for (const connection of added_connections)
+		{
+			this.RemoveGraphConnection(connection[0], connection[1]);
+		}
+		
+		if (this.print_performance)
+			console.timeEnd("LabelGraphSeparated");
+
+		if (solution_state === undefined)
+			return false;
+
+		this.SetGraphState(solution_state);
 		return true;
 	}
 

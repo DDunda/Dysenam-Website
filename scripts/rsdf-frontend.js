@@ -99,6 +99,7 @@ function UpdateLayers(e)
 		layers.forEach(layer => layer.poly = CONVERTER.CPolyToPoints(layer.poly));
 		CONVERTER.SetupGraph(layers);
 		layers = CONVERTER.LayersCalculateVectors(layers);
+		layer_distances = CONVERTER.GetInterRegionDistances(layers);
 		import_converter = CONVERTER.Copy();
 	}
 	else
@@ -108,7 +109,9 @@ function UpdateLayers(e)
 		);
 	}
 
-	if (!CONVERTER.LabelGraph(layers))
+	if (!(CONVERTER.separated
+		? CONVERTER.LabelGraphSeparated(layers, layer_distances)
+		: CONVERTER.LabelGraph(layers)))
 	{
 		DisplayLayers();
 		layers = undefined;
@@ -390,6 +393,8 @@ function AddCallbacks()
 		"output-falsecolour": "render_falsecolour",
 		"sdf-perpendicular": "perpendicular",
 		"sdf-inverted": "inverted",
+		"sdf-separated": "separated",
+		"sdf-separation-limit": "separation_limit",
 		"colour-background-enabled": "background_enabled",
 		"colour-linear": "linear_enabled",
 		"placement-fixed-aspect": "fixed_aspect",
@@ -460,6 +465,7 @@ function AddCallbacks()
 		"output-size": "size",
 		"sdf-inner": "inner_px",
 		"sdf-outer": "outer_px",
+		"sdf-separation-minimum": "separation_minimum",
 		"placement-aspect": "aspect",
 		"placement-alignment-x": "alignment_x",
 		"placement-alignment-y": "alignment_y",
@@ -610,6 +616,7 @@ const NO_FILE_TEXT = "No file selected (0 bytes)";
 let svg_input = null;
 let svg_overlay_group = null;
 let layers = [];
+let layer_distances = [];
 let filename = "";
 
 let import_converter = undefined; // The converter settings used to import the SVG to polygons
