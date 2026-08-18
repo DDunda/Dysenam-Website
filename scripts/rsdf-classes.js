@@ -541,29 +541,29 @@ class BVH
 	}
 
 	// Attaches a calculated BVH onto a layer from its points.
-	static CalculateForLayer(layer)
+	static CalculateForLayer(layer, leaf_size)
 	{
+		if ("bvh" in layer)
+			return layer;
+
 		const edges = LayerToEdges(layer);
 		const bounds = Bounds.FromEdges(edges);
 
 		layer.bvh = BVH.FromEdges(
 			edges,
-			bounds
+			bounds,
+			leaf_size
 		);
-
-		console.log(layer.bvh.ToString(bounds));
 		
 		return layer;
 	}
 
 	// Runs BVH.CalculateForLayer for each layer in an array
-	static CalculateForLayers(layers)
+	static CalculateForLayers(layers, leaf_size)
 	{
-		console.time("BVH.CalculateForLayers");
 		layers.forEach(layer => {
-			BVH.CalculateForLayer(layer)
+			BVH.CalculateForLayer(layer, leaf_size)
 		});
-		console.timeEnd("BVH.CalculateForLayers");
 		
 		return layers;
 	}

@@ -252,6 +252,9 @@ class RSDFConverter {
 		this.outer_px = 1; // Pixels relative to size of image
 		this.perpendicular = false; // Whether distance should be perpendicular rather than euclidean
 		this.inverted = false; // Whether to map distances from [0,1] to [1,0]
+		this.separated = true; // Whether the distances between similar regions is maximised
+		this.separation_limit = true; // Whether to ignore separation past a certain distance
+		this.separation_minimum = 1; // The maximum range to attempt separating regions
 		
 		this.background_enabled = true;
 		this.background_colour = new RGB(0,0,0,0);
@@ -301,6 +304,9 @@ class RSDFConverter {
 		output.outer_px = this.outer_px;
 		output.perpendicular = this.perpendicular;
 		output.inverted = this.inverted;
+		output.separated = this.separated;
+		output.separation_limit = this.separation_limit;
+		output.separation_minimum = this.separation_minimum;
 		output.background_enabled = this.background_enabled;
 		output.background_colour = this.background_colour.Copy();
 		output.bleed_mode = this.bleed_mode;
@@ -1295,8 +1301,6 @@ class RSDFConverter {
 				}
 			}
 		});
-		
-		// TODO: Annotate distances between all regions
 	}
 
 	// Finds labels that are not immediately blocked by neighbours
@@ -1327,42 +1331,60 @@ class RSDFConverter {
 		// Block labels if using it would cause a clique to have
 		// less labels available than there are nodes.
 		[...unknown_connections]
-		.forEach((c1, i, arr1) => {
+		.forEach((c1, i1, arr1) => {
 			const c1_labels = this.GetValidLayerLabels(c1);
 
 			// Connections of layer AND c1
 			const possible_c2 = new Set(
-				arr1.slice(i + 1)
+				arr1.slice(i1 + 1)
 			).intersection(c1.connections);			
 
 			[...possible_c2]
-			.forEach((c2, j, arr2) => {
+			.forEach((c2, i2, arr2) => {
 				const c2_labels = this.GetValidLayerLabels(c2);
 				const c12_labels = c1_labels.union(c2_labels);
 
 				// Connections of layer AND c1 AND c2
 				const possible_c3 = new Set(
-					arr2.slice(j + 1)
+					arr2.slice(i2 + 1)
 				).intersection(c2.connections);
 
 				[...possible_c3]
-				.forEach((c3, k, arr3) => {
+				.forEach((c3, i3, arr3) => {
 					const c3_labels = this.GetValidLayerLabels(c3);
 					const c123_labels = c12_labels.union(c3_labels);
+					
+					// Connections of layer AND c1 AND c2 AND c3
+					const possible_c4 = new Set(
+						arr3.slice(i3 + 1)
+					).intersection(c3.connections);
+
+					// A >=5-clique has formed! Impossible to colour.
+					if (possible_c4.length > 0)
+						connection_labels = connection_labels.union(RSDFConverter.GRAPH_LABELS);
 
 					// 4-clique neighbours (maximum) with only three labels
-					if (c123_labels.size < 4)
+					if (c123_labels.size == 3)
 						connection_labels = connection_labels.union(c123_labels);
+					// Less labels than clique neighbours! Impossible to colour.
+					else if (c123_labels.size < 3)
+						connection_labels = connection_labels.union(RSDFConverter.GRAPH_LABELS);
 				});
 
 				// 3-clique neighbours with only two labels
-				if (c12_labels.size < 3)
+				if (c12_labels.size == 2)
 					connection_labels = connection_labels.union(c12_labels);
+				// Less labels than clique neighbours! Impossible to colour.
+				else if (c12_labels.size < 2)
+					connection_labels = connection_labels.union(RSDFConverter.GRAPH_LABELS); // Invalid state
 			});
 
 			// 2-clique neighbour with only one label
-			if (c1_labels.size < 2)
+			if (c1_labels.size == 1)
 				connection_labels = connection_labels.union(c1_labels);
+			// Less labels than clique neighbours! Impossible to colour.
+			else if (c1_labels.size < 1)
+				connection_labels = connection_labels.union(RSDFConverter.GRAPH_LABELS); // Invalid state
 		});
 
 		// Return valid labels without those that break cliques
@@ -1422,10 +1444,10 @@ class RSDFConverter {
 		);
 	}
 
-	// Resets a graph using a map from layers to original labels
-	ResetGraphState(initial_state)
+	// Sets a graph's state using a map from layers to labels
+	SetGraphState(state)
 	{
-		[...initial_state.entries()]
+		[...state.entries()]
 		.forEach(([layer, label]) =>
 			this.LabelLayer(layer, label)
 		);
@@ -1457,7 +1479,7 @@ class RSDFConverter {
 
 				if (possible_labels.size == 0)
 				{
-					this.ResetGraphState(initial_state);
+					this.SetGraphState(initial_state);
 					return false;
 				}
 				else if (possible_labels.size == 1)
@@ -1515,7 +1537,7 @@ class RSDFConverter {
 			{
 				if (allowed_labels.length == 0)
 				{
-					this.ResetGraphState(initial_state);
+					this.SetGraphState(initial_state);
 					return false;
 				}
 
@@ -1550,6 +1572,156 @@ class RSDFConverter {
 			})
 		);
 		
+		return true;
+	}
+
+	AddGraphConnection(layer_a, layer_b)
+	{
+		if (layer_a === layer_b)
+			return;
+
+		if (!layer_a.connections.has(layer_b))
+		{
+			const label_b = layer_b.graph_label;
+			layer_a.neighbour_labels.set(
+				label_b,
+				layer_a.neighbour_labels.get(label_b) + 1
+			);
+			layer_a.connections.add(layer_b);
+		}
+
+		if (!layer_b.connections.has(layer_a))
+		{
+			const label_a = layer_a.graph_label;
+			layer_b.neighbour_labels.set(
+				label_a,
+				layer_b.neighbour_labels.get(label_a) + 1
+			);
+			layer_b.connections.add(layer_a);
+		}
+	}
+
+	RemoveGraphConnection(layer_a, layer_b)
+	{
+		if (layer_a === layer_b)
+			return;
+
+		if (layer_a.connections.has(layer_b))
+		{
+			const label_b = layer_b.graph_label;
+			layer_a.neighbour_labels.set(
+				label_b,
+				layer_a.neighbour_labels.get(label_b) - 1
+			);
+			layer_a.connections.delete(layer_b);
+		}
+
+		if (layer_b.connections.has(layer_a))
+		{
+			const label_a = layer_a.graph_label;
+			layer_b.neighbour_labels.set(
+				label_a,
+				layer_b.neighbour_labels.get(label_a) - 1
+			);
+			layer_b.connections.delete(layer_a);
+		}
+	}
+
+	// Gets distances between every region, even if disconnected
+	GetInterRegionDistances(layers)
+	{
+		BVH.CalculateForLayers(layers, this.bvh_leaf_size);
+
+		return layers.slice(0, layers.length - 1)
+		.map((layer_a, a) =>
+			layers
+			.slice(a + 1)
+			.map((layer_b, b) => {
+				let min_dist = Number.POSITIVE_INFINITY;
+
+				// Compare every point in A to B's BVH
+				min_dist = layer_a.poly.flat(1).reduce(
+					(dist, point) => layer_b.bvh.SignedDistance(new Point(point.X, point.Y), dist),
+					min_dist
+				);
+
+				// Compare every point in B to A's BVH
+				min_dist = layer_b.poly.flat(1).reduce(
+					(dist, point) => layer_a.bvh.SignedDistance(new Point(point.X, point.Y), dist),
+					min_dist
+				);
+
+				return {
+					distance: min_dist.euclidean_signed,
+					layers: [layer_a, layer_b]
+				};
+			})
+		).flat(1);
+	}
+
+	// Attempts to label a graph while maximising distances between each set of labels.
+	LabelGraphSeparated(layers, distances)
+	{
+		if (layers.length == 0)
+			return true;
+
+		if (this.separation_limit)
+			distances = distances
+			.filter(dist => dist.distance < this.separation_minimum);
+
+		distances = distances
+		.filter(dist =>
+			// Ignore if already connected
+			!(
+				dist.layers[0].connections.has(dist.layers[1]) ||
+				dist.layers[1].connections.has(dist.layers[0])
+			)
+		)
+		// Attempt to connect the closest layers first
+		.sort((a, b) => a.distance - b.distance);
+
+		if (distances.length == 0)
+			return this.LabelGraph(layers);
+		
+		if (this.print_performance)
+			console.time("LabelGraphSeparated");
+
+		let added_connections = [];
+		let initial_state = this.GetGraphState(layers);
+		let solution_state = undefined;
+
+		for (const dist of distances)
+		{
+			this.AddGraphConnection(dist.layers[0], dist.layers[1]);
+
+			if (!this.LabelGraph(layers))
+			{
+				this.RemoveGraphConnection(dist.layers[0], dist.layers[1]);
+				continue;
+			}
+
+			added_connections.push([
+				dist.layers[0],
+				dist.layers[1]
+			]);
+
+			solution_state = this.GetGraphState(layers);
+			this.SetGraphState(initial_state);
+		}
+
+		// Remove these connections since they aren't "real"
+		for (const connection of added_connections)
+		{
+			this.RemoveGraphConnection(connection[0], connection[1]);
+		}
+		
+		if (this.print_performance)
+			console.timeEnd("LabelGraphSeparated");
+
+		if (solution_state === undefined)
+			return false;
+
+		this.SetGraphState(solution_state);
 		return true;
 	}
 
