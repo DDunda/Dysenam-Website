@@ -374,8 +374,8 @@ function SaveSDFs(e)
 
 	if (OUTPUT_REGIONS.style.display != "none")
 		SaveCanvas(
-			saturated_img,
-			filename_prefix + "Saturated" + filename_suffix
+			regions_img,
+			filename_prefix + "Regions" + filename_suffix
 		);
 
 	if (OUTPUT_COLOUR.style.display != "none")
