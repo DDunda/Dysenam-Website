@@ -1440,10 +1440,10 @@ class RSDFConverter {
 		);
 	}
 
-	// Resets a graph using a map from layers to original labels
-	ResetGraphState(initial_state)
+	// Sets a graph's state using a map from layers to labels
+	SetGraphState(state)
 	{
-		[...initial_state.entries()]
+		[...state.entries()]
 		.forEach(([layer, label]) =>
 			this.LabelLayer(layer, label)
 		);
@@ -1475,7 +1475,7 @@ class RSDFConverter {
 
 				if (possible_labels.size == 0)
 				{
-					this.ResetGraphState(initial_state);
+					this.SetGraphState(initial_state);
 					return false;
 				}
 				else if (possible_labels.size == 1)
@@ -1533,7 +1533,7 @@ class RSDFConverter {
 			{
 				if (allowed_labels.length == 0)
 				{
-					this.ResetGraphState(initial_state);
+					this.SetGraphState(initial_state);
 					return false;
 				}
 
